@@ -10,7 +10,7 @@ printf '%s\n' "$metadata" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
 expected="http://127.0.0.1:8081/realms/iam-lab"
-assert d.get("issuer")==expected, f"unexpected issuer: {d.get(chr(105)+chr(115)+chr(115)+chr(117)+chr(101)+chr(114))}"
+assert d.get("issuer")==expected, "unexpected issuer from discovery endpoint"
 assert d.get("jwks_uri")==expected+"/protocol/openid-connect/certs"
 print("PASS: local issuer and JWKS endpoint match application configuration")
 '
