@@ -11,6 +11,10 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.http.MediaType;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -90,6 +94,75 @@ class AccessRequestPersistenceIT {
         jdbc.update("INSERT INTO employees (tenant_id,id,lifecycle_status) VALUES (? ,?, 'ACTIVE')", tenant, employee);
         jdbc.update("INSERT INTO applications (tenant_id,id,lifecycle_status) VALUES (?, ?, 'ACTIVE')", tenant, application);
         jdbc.update("INSERT INTO application_roles (tenant_id,application_id,role_key) VALUES (?, ?, ?)", tenant, application, "READER");
+    }
+
+    private String requestBody(UUID subject, UUID app) {
+        return "{\"employeeId\":\"" + subject + "\",\"applicationId\":\"" + app + "\",\"roleKey\":\"READER\"}";
+    }
+
+    private org.springframework.test.web.servlet.request.RequestPostProcessor authenticated(
+            UUID tokenTenant, String subject, boolean scope) {
+        var processor = jwt().jwt(builder -> builder
+                .issuer("http://127.0.0.1:8081/realms/iam-lab")
+                .subject(subject).claim("tenant_id", tokenTenant.toString()));
+        return scope ? processor.authorities(new SimpleGrantedAuthority("SCOPE_access:request"))
+                : processor.authorities();
+    }
+
+    @Test
+    void mappedActorWithScopeCanCreateAndRetryOverHttp() throws Exception {
+        jdbc.update("INSERT INTO employee_identities (tenant_id,employee_id,issuer,subject) VALUES (?,?,?,?)",
+                tenant, actor, "http://127.0.0.1:8081/realms/iam-lab", "admin-user");
+        jdbc.update("INSERT INTO employee_permissions (tenant_id,employee_id,permission_key) VALUES (?,?,'ACCESS_REQUEST_CREATE')",
+                tenant, actor);
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        for (int repeat = 0; repeat < 2; repeat++) {
+            mvc.perform(post("/api/v1/access-requests")
+                    .with(authenticated(tenant, "admin-user", true))
+                    .header("Idempotency-Key", "api-001")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(requestBody(employee, application)))
+                    .andExpect(status().isCreated());
+        }
+        assertEquals(1, count());
+    }
+
+    @Test
+    void unmappedOrUnpermittedActorIsRejected() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(post("/api/v1/access-requests")
+                .with(authenticated(tenant, "admin-user", true))
+                .header("Idempotency-Key", "no-permission")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(employee, application)))
+                .andExpect(status().isForbidden());
+        assertEquals(0, count());
+    }
+
+    @Test
+    void tokenWithMissingRequiredScopeIsRejected() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(post("/api/v1/access-requests")
+                .with(authenticated(tenant, "admin-user", false))
+                .header("Idempotency-Key", "no-scope")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(employee, application)))
+                .andExpect(status().isForbidden());
+        assertEquals(0, count());
+    }
+
+    @Test
+    void tenantHeaderCannotOverrideAuthenticatedActor() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(post("/api/v1/access-requests")
+                .with(authenticated(UUID.randomUUID(), "admin-user", true))
+                .header("X-Tenant-Id", tenant.toString())
+                .header("X-Requester-Id", actor.toString())
+                .header("Idempotency-Key", "spoof")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(employee, application)))
+                .andExpect(status().isForbidden());
+        assertEquals(0, count());
     }
 
     @Test
