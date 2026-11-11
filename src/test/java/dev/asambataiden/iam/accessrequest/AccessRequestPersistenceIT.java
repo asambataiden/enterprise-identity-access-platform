@@ -80,6 +80,8 @@ class AccessRequestPersistenceIT {
     @BeforeEach
     void seed() {
         jdbc.update("DELETE FROM access_requests");
+        jdbc.update("DELETE FROM employee_permissions");
+        jdbc.update("DELETE FROM employee_identities");
         jdbc.update("DELETE FROM application_roles");
         jdbc.update("DELETE FROM applications");
         jdbc.update("DELETE FROM employees");
