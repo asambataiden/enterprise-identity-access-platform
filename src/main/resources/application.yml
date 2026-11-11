@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: enterprise-identity-access-platform
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+server:
+  address: 127.0.0.1
