@@ -20,5 +20,8 @@ jobs:
         run: |
           python3 -m json.tool ops/keycloak/realm/iam-lab-realm.json >/dev/null
           bash -n ops/keycloak/check-metadata.sh
+          python3 ops/keycloak/check-pkce-fixture.py
+          python3 -m py_compile ops/keycloak/oidc-pkce-smoke.py
+          docker compose -f ops/keycloak/compose.yaml config --quiet --no-interpolate
       - name: Verify Java baseline
         run: mvn -B --no-transfer-progress clean verify
