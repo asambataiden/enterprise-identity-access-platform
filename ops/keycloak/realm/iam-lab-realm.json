@@ -1,0 +1,12 @@
+{
+  "realm": "iam-lab",
+  "enabled": true,
+  "displayName": "Synthetic IAM local lab",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "bruteForceProtected": true
+}
