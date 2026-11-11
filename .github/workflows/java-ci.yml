@@ -16,5 +16,9 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Validate local Keycloak lab assets
+        run: |
+          python3 -m json.tool ops/keycloak/realm/iam-lab-realm.json >/dev/null
+          bash -n ops/keycloak/check-metadata.sh
       - name: Verify Java baseline
         run: mvn -B --no-transfer-progress clean verify

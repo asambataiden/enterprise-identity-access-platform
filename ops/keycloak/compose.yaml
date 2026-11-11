@@ -1,0 +1,16 @@
+# Local developer-only identity provider. Never deploy this Compose file to production.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: ["start-dev", "--import-realm", "--hostname=http://127.0.0.1:8281"]
+    ports:
+      - "127.0.0.1:8281:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${IAM_LAB_ADMIN_USERNAME:?Set IAM_LAB_ADMIN_USERNAME in your terminal}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${IAM_LAB_ADMIN_PASSWORD:?Set IAM_LAB_ADMIN_PASSWORD in your terminal}"
+    volumes:
+      - ./realm:/opt/keycloak/data/import:ro
+    mem_limit: 1g
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
