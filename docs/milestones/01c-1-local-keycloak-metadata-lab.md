@@ -8,7 +8,7 @@ An isolated, localhost-only Keycloak 26.8.2 instance imports a synthetic `iam-la
 
 ```mermaid
 flowchart LR
-    Developer[macOS browser / curl] -->|"localhost:8081"| KC[Keycloak dev server]
+    Developer[macOS browser / curl] -->|"localhost:8281"| KC[Keycloak dev server]
     KC --> Realm[iam-lab test realm]
     API[Spring Resource Server] -.->|"future: signed token, issuer + JWKS"| Realm
     DB[(PostgreSQL Testcontainers)] -.->|"separate tests"| API
@@ -18,7 +18,7 @@ flowchart LR
 
 ## Security model
 
-- Local-only binding: `127.0.0.1:8081` on your Mac.
+- Local-only binding: `127.0.0.1:8281` on your Mac.
 - Keycloak `start-dev` is explicitly insecure and **never** a production deployment.
 - A lab-specific bootstrap administrator password is supplied through environment variables, not stored in Git or `.env` files.
 - The imported realm disables self-registration; no users or passwords are included.
@@ -33,13 +33,15 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 # Use a unique LAB-only bootstrap administrator secret.
-read -r -p "Lab admin username: " IAM_LAB_ADMIN_USERNAME
-read -r -s -p "Lab admin password: " IAM_LAB_ADMIN_PASSWORD
+read -r "IAM_LAB_ADMIN_USERNAME?Lab admin username: "
+read -rs "IAM_LAB_ADMIN_PASSWORD?Lab admin password: "
 printf '\n'
 export IAM_LAB_ADMIN_USERNAME IAM_LAB_ADMIN_PASSWORD
 
 # Inspect the rendered local configuration before starting anything.
 docker compose -f ops/keycloak/compose.yaml config --quiet
+# Check local host port is free before `up`.
+lsof -nP -iTCP:8281 -sTCP:LISTEN || true
 
 # This will download/start one local Keycloak development container.
 docker compose -f ops/keycloak/compose.yaml up -d
@@ -49,7 +51,7 @@ docker compose -f ops/keycloak/compose.yaml ps
 bash ops/keycloak/check-metadata.sh
 ```
 
-The realm's OIDC discovery URL is `http://127.0.0.1:8081/realms/iam-lab/.well-known/openid-configuration`.
+The realm's OIDC discovery URL is `http://127.0.0.1:8281/realms/iam-lab/.well-known/openid-configuration`.
 
 **Credential handling:** do not paste environment-variable contents, real access tokens, bootstrap passwords or admin-session output into ChatGPT or GitHub. The shell environment retains the password until you `unset IAM_LAB_ADMIN_PASSWORD IAM_LAB_ADMIN_USERNAME`; avoid using long-lived credentials.
 
