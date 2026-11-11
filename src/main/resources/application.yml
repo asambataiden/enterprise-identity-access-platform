@@ -7,6 +7,14 @@ spring:
     password: ${DB_PASSWORD:}
   flyway:
     enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${IAM_JWT_ISSUER_URI:http://127.0.0.1:8081/realms/iam-lab}
+          jwk-set-uri: ${IAM_JWT_JWKS_URI:http://127.0.0.1:8081/realms/iam-lab/protocol/openid-connect/certs}
+          audiences:
+            - ${IAM_JWT_AUDIENCE:iam-governance-api}
 management:
   endpoints:
     web:
