@@ -7,6 +7,8 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -35,6 +37,13 @@ class AccessRequestPersistenceIT {
 
     @Autowired AccessRequestService service;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ApplicationContext context;
+
+    @Test
+    void noDefaultInMemoryDevelopmentUserIsCreated() {
+        assertTrue(context.getBeansOfType(UserDetailsService.class).isEmpty(),
+                "An unused in-memory development account must not be created");
+    }
 
     UUID tenant, actor, employee, application;
 
