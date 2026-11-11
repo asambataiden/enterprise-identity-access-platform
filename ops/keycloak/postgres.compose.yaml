@@ -1,0 +1,18 @@
+# Separate, disposable IAM-only database: never connect to the payment platform's 5432.
+services:
+  iam-lab-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: iamdb
+      POSTGRES_USER: iam_app
+      POSTGRES_PASSWORD: "${IAM_LAB_DB_PASSWORD:?Set lab-only IAM_LAB_DB_PASSWORD}"
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iam_app -d iamdb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: "no"
