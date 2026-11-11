@@ -11,6 +11,7 @@ import http.server
 import json
 import secrets
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -60,14 +61,25 @@ def main():
 
     class Callback(http.server.BaseHTTPRequestHandler):
         result = None
+        oauth_error = None
 
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             params = urllib.parse.parse_qs(parsed.query)
-            if parsed.path != "/callback" or params.get("state") != [state]:
-                self.send_error(400, "Unexpected callback/state")
+            if parsed.path != "/callback":
+                self.send_error(404, "Unexpected path")
                 return
-            Callback.result = params
+            if params.get("state") != [state]:
+                self.send_error(400, "Invalid OAuth state")
+                return
+            if "error" in params:
+                # Do not render, persist or echo untrusted error descriptions.
+                Callback.oauth_error = params["error"][0][:60]
+            elif len(params.get("code", [])) == 1:
+                Callback.result = params
+            else:
+                self.send_error(400, "Missing authorization code")
+                return
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
@@ -77,7 +89,7 @@ def main():
             pass  # never log authorization codes or query strings
 
     server = http.server.HTTPServer(("127.0.0.1", 8765), Callback)
-    server.timeout = 180
+    server.timeout = 1
     params = {
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT,
@@ -93,12 +105,21 @@ def main():
     try:
         if not webbrowser.open(url):
             print("Browser did not open automatically; use the local login URL manually:", url)
-        server.handle_request()
+        deadline = time.monotonic() + 180
+        while time.monotonic() < deadline and Callback.result is None and Callback.oauth_error is None:
+            server.handle_request()
     finally:
         server.server_close()
+    if Callback.oauth_error is not None:
+        # Distinguish a Keycloak refusal from an unrelated callback or timeout.
+        safe_errors = {"access_denied", "invalid_request", "unauthorized_client",
+                       "unsupported_response_type", "invalid_scope", "server_error",
+                       "temporarily_unavailable"}
+        code = Callback.oauth_error if Callback.oauth_error in safe_errors else "unrecognized_error"
+        raise RuntimeError("Keycloak returned OAuth error: " + code)
     result = Callback.result
-    if not result or "code" not in result:
-        raise RuntimeError("Login callback missing, timed out, or denied")
+    if not result:
+        raise RuntimeError("No valid OAuth callback within 180 seconds; complete browser login while the helper is running")
     token_data = urllib.parse.urlencode({
         "grant_type": "authorization_code",
         "client_id": CLIENT_ID,
