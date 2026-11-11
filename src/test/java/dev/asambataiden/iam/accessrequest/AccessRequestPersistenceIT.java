@@ -7,6 +7,11 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -37,6 +42,27 @@ class AccessRequestPersistenceIT {
 
     @Autowired AccessRequestService service;
     @Autowired JdbcTemplate jdbc;
+    @Autowired WebApplicationContext webContext;
+
+    @Test
+    void anonymousAccessRequestRouteIsDenied() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(get("/api/v1/access-requests")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void malformedBearerTokenIsRejected() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(get("/api/v1/access-requests").header("Authorization", "Bearer not-a-valid-jwt"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void healthEndpointIsAnonymous() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(get("/actuator/health")).andExpect(status().isOk());
+    }
+
     @Autowired ApplicationContext context;
 
     @Test
