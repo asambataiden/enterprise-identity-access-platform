@@ -79,16 +79,11 @@ For this first test, the Java database deliberately has **no** binding for that 
 
 ## 5. Start the Java API using the isolated database
 
-In a **separate terminal** within the repository:
+Use the **original terminal from step 3**, where `DB_PASSWORD` is already exported. This avoids copying or displaying the generated database secret:
 
 ```zsh
 export DB_URL=jdbc:postgresql://127.0.0.1:55432/iamdb
 export DB_USERNAME=iam_app
-# Set DB_PASSWORD to the same lab-only database password using secure input.
-read -rs "DB_PASSWORD?IAM lab DB password: "
-printf '\n'
-export DB_PASSWORD
-
 export IAM_JWT_ISSUER_URI=http://127.0.0.1:8281/realms/iam-lab
 export IAM_JWT_JWKS_URI=http://127.0.0.1:8281/realms/iam-lab/protocol/openid-connect/certs
 export IAM_JWT_AUDIENCE=iam-governance-api
@@ -96,7 +91,7 @@ export IAM_JWT_AUDIENCE=iam-governance-api
 mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
 ```
 
-Use the **existing generated lab database password** from step 3 in this second terminal. Alternatively, start the API from the same original terminal so it inherits `DB_PASSWORD`; keep it in the foreground. The application runs Flyway migrations V1/V2 on the disposable IAM database. Check `curl -fsS http://127.0.0.1:8082/actuator/health`.
+Keep the Java application in the foreground. Run the following Python browser smoke in a **second terminal** after its health endpoint becomes available. The application runs Flyway migrations V1/V2 on the disposable IAM database. Check `curl -fsS http://127.0.0.1:8082/actuator/health`.
 
 ## 6. Run the browser PKCE + API smoke
 
