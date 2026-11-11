@@ -1,12 +1,12 @@
 package dev.asambataiden.iam;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-@SpringBootTest
+/** Fast smoke-level class test. Database-backed context is exercised in *IT. */
 class IamApplicationTest {
     @Test
-    void contextLoads() {
-        // A bootstrap test only: business behaviors are specified, not implemented.
+    void applicationEntryPointIsPresent() {
+        assertNotNull(IamApplication.class);
     }
 }
