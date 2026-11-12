@@ -83,3 +83,27 @@ D. Once tested, retain only the revocation result for the approver and the alrea
 **Why synthetic SQL requests?** They isolate the **approval decision API** and avoid re-enabling the requester CREATE grant just to create test data. The test must not be misrepresented as end-to-end CREATE→APPROVE.
 
 **What remains?** Live operator outcomes, denial from incorrect/foreign tenants with distinct real principals, full lifecycle tests, separate audit evidence, and downstream provisioning. No entitlement is provisioned by approval.
+
+## Operator acceptance results — 2026-11-12 (isolated localhost lab)
+
+The operator ran the existing scripts against a local Keycloak 26.8.2 realm, IAM API on port 8082 and isolated PostgreSQL on 127.0.0.1:55432, and reported the following **terminal and SQL evidence**. These are operator-observed local outcomes, not CI or a production certification.
+
+| Scenario | Evidence | Outcome |
+|---|---|---|
+| OIDC preflight | Local issuer/JWKS checked; IAM API `UP`; PostgreSQL healthy | PASS |
+| Optional scope | `ensure-decision-scope.py` readback reported `access:decide` configured | PASS |
+| Approver binding | Separate test approver mapped to active tenant employee; DECIDE grant present | PASS |
+| Approval | Real browser Authorization Code + S256 PKCE; issuer/audience/scope/tenant claims present in helper; IAM API HTTP 200; independent SQL status `APPROVED` | PASS |
+| Rejection | Separate browser PKCE; API HTTP 200; independent SQL status `REJECTED` | PASS |
+| Transactional audit | Both requests joined their decision and `ACCESS_REQUEST_DECIDED` audit rows, with matching outcomes and approver IDs | PASS |
+| Repeat approval | Same already-APPROVED request returned HTTP 409 | PASS |
+| Revocation | `provision-synthetic-approver.py --revoke` reported local DECIDE grant absent, original requester CREATE grant still absent | PASS |
+| Revoked approver | New PKCE session for approver, scope present; unused PENDING test request returned HTTP 403 | PASS |
+
+All three deterministic synthetic request IDs remained internal test IDs; the unused self-scenario request was not approved. The Python helper **does not verify JWT cryptographic signatures**; trusted signature/issuer/audience validation is performed by the Java resource server when accepting the token. The HTTP statuses and SQL readbacks establish application behavior, not independent cryptographic inspection of the JWT. The 403 after revocation demonstrates tenant-local permission enforcement, **not** a real-token self-approval test, because the signed-in actor was the separate approver and its permission was revoked.
+
+**Remaining acceptance gaps:** authenticated requester self-approval denied *while holding a valid DECIDE permission*; live wrong-tenant principal/target negative tests; production-grade administrator authentication and authorization for any quarantine-review service; actual target reconciliation and production provisioning. No entitlement was activated by these tests. Credentials, bearer tokens and callback URLs were deliberately omitted from evidence.
+
+### Operator cleanup state
+
+The temporary synthetic approver DECIDE permission was revoked and confirmed absent. The original test requester's CREATE permission remains revoked. Do not rerun `--grant` outside a new scoped, explicitly approved acceptance exercise. Synthetic decision records and audit history are intentionally preserved.

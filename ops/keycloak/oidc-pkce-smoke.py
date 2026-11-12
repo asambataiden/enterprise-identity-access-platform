@@ -280,7 +280,8 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
     elif code == 404:
         print("Requested target unavailable in authenticated tenant.")
     elif code == 409:
-        print("Existing idempotency key conflicts with changed request terms.")
+        print("Decision request conflicts with an existing decision." if args.decision_request_id else
+              "Existing idempotency key conflicts with changed request terms.")
     if args.expect_status is None:
         print("No expectation asserted; use --expect-status to turn this into verification evidence.")
 
