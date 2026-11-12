@@ -171,11 +171,25 @@ def main():
         if not args.expected_tenant_id:
             raise RuntimeError("Set IAM_LAB_TENANT_ID or --expected-tenant-id for local binding diagnosis")
         expected_tenant = uuid.UUID(args.expected_tenant_id)
+        # Diagnose claim representation without disclosing identifiers or tokens.
+        # OAuth/OIDC 'sub' is an opaque string; it does NOT need to be a UUID.
+        tenant_claim = claims.get("tenant_id")
+        subject_claim = claims.get("sub")
+        print("Diagnostic: tenant_id claim type:", type(tenant_claim).__name__)
+        print("Diagnostic: sub claim type:", type(subject_claim).__name__)
         try:
-            actual_tenant = uuid.UUID(str(claims.get("tenant_id", "")))
-            subject = uuid.UUID(str(claims.get("sub", "")))
-        except (ValueError, TypeError):
-            raise RuntimeError("Token tenant/subject is not a valid UUID") from None
+            actual_tenant = uuid.UUID(tenant_claim) if isinstance(tenant_claim, str) else None
+        except ValueError:
+            actual_tenant = None
+        print("Diagnostic: tenant_id is UUID string:", actual_tenant is not None)
+        print("Diagnostic: sub is nonempty string:",
+              isinstance(subject_claim, str) and bool(subject_claim))
+        if actual_tenant is None:
+            raise RuntimeError("tenant_id is not a UUID string; inspect Keycloak protocol mapper configuration")
+        if not isinstance(subject_claim, str) or not subject_claim or len(subject_claim) > 255:
+            raise RuntimeError("sub is not an acceptable opaque subject string")
+        # Quote escaping is required because OIDC subjects are opaque strings.
+        safe_subject = subject_claim.replace("'", "''")
         issuer = claims.get("iss")
         if issuer != ISSUER:
             raise RuntimeError("Token issuer differs from local expected issuer")
@@ -190,7 +204,7 @@ JOIN employee_permissions p
   ON p.tenant_id=e.tenant_id AND p.employee_id=e.id
 WHERE i.tenant_id='""" + str(actual_tenant) + """'
   AND i.issuer='http://127.0.0.1:8281/realms/iam-lab'
-  AND i.subject='""" + str(subject) + """'
+  AND i.subject='""" + safe_subject + """'
   AND e.lifecycle_status='ACTIVE'
   AND p.permission_key='ACCESS_REQUEST_CREATE';
 """)
