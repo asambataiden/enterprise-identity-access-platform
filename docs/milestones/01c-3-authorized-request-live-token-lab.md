@@ -215,11 +215,17 @@ Reference: https://docs.spring.io/spring-security/reference/servlet/authorizatio
 
 **Status:** real-token 201 PENDING + stable idempotent retry and foreign-tenant 404 are verified. The changed-payload same-key **409** and explicit grant-revocation **403** still require operator evidence. Never merge this milestone based solely on unit tests.
 
+## Verified operator evidence — real-token idempotency conflict (12 November 2026)
+
+**Observed:** local IAM API health reported `UP`; the real Keycloak Authorization Code + PKCE client used the already persisted key `iam-lab-positive-01` with **different** same-tenant employee `8b0c5b74-5143-568f-b03a-19d2b0a8c42a` and application `0f072d55-aadd-51c5-a04d-1bff3315dec7`. The signed-token request yielded **HTTP 409** and `Existing idempotency key conflicts with changed request terms.` This establishes externally observable conflict handling. The helper did not disclose access tokens or the error body. The previously observed same-payload repeat returned 201 and the same stored request ID.
+
+**Remaining:** only the live **revoke local grant → HTTP 403** acceptance evidence. The fixture's `--revoke` option explicitly deletes only `ACCESS_REQUEST_CREATE` for the synthetic actor/tenant and verifies the grant is absent. Revoke is an intentional local lab state change, not a test to run against real tenants. Complete that check before merging.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
 - Added JUnit/Testcontainers cases (mock JWT policy, **not** live signed tokens): revoked permission => 403, foreign-tenant target => 404, reused key with different terms => 409.
-- Real Keycloak HTTP 201 + PENDING + stable idempotency retry and cross-tenant HTTP 404: **verified by operator output** on 12 November 2026. Real-token changed-payload same-key HTTP 409 and revoke-403: **pending**.
+- Real Keycloak HTTP 201 + PENDING + stable idempotency retry and cross-tenant HTTP 404: **verified by operator output** on 12 November 2026. Real-token changed-payload same-key HTTP 409: **verified**. Grant revocation → HTTP 403: **pending**.
 - Run `mvn -B --no-transfer-progress clean verify` and check GitHub CI before merge.
 - Test identity is fictional; do not use project/company real user identities or emails.
 
