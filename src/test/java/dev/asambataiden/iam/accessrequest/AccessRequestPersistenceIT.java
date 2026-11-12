@@ -1,6 +1,8 @@
 package dev.asambataiden.iam.accessrequest;
 
 import java.util.UUID;
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.RequestDispatcher;
 import java.util.concurrent.*;
 import java.util.stream.IntStream;
 
@@ -300,6 +302,27 @@ class AccessRequestPersistenceIT {
                 .content(requestBody(actor, application)))
                 .andExpect(status().isConflict());
         assertEquals(1, count());
+    }
+
+
+    @Test
+    void errorDispatchRetainsOriginal404WithoutBearerScope() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(get("/error")
+                .with(request -> {
+                    request.setDispatcherType(DispatcherType.ERROR);
+                    request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE, 404);
+                    request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI, "/api/v1/access-requests");
+                    return request;
+                }))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void directRequestToErrorRouteIsStillDenied() throws Exception {
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(get("/error"))
+                .andExpect(status().isUnauthorized());
     }
 
     private int count() {
