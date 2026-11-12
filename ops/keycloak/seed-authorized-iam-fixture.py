@@ -20,7 +20,6 @@ KEYCLOAK = ROOT / "ops/keycloak/provision-synthetic-user.py"
 TENANT_ENV = "IAM_LAB_TENANT_ID"
 ISSUER = "http://127.0.0.1:8281/realms/iam-lab"
 DB_CONTAINER = "keycloak-iam-lab-db-1"
-DB_COMPOSE = ROOT / "ops/keycloak/postgres.compose.yaml"
 
 
 def kc_module():
@@ -38,12 +37,16 @@ def psql(sql):
     bindings = ports.get("5432/tcp") or []
     if len(bindings) != 1 or bindings[0].get("HostIp") != "127.0.0.1" or bindings[0].get("HostPort") != "55432":
         raise RuntimeError("Refusing SQL: expected IAM-only DB container on 127.0.0.1:55432")
-    run = subprocess.run(["docker", "compose", "-f", str(DB_COMPOSE), "exec", "-T",
-                          "iam-lab-db", "psql", "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1",
+    # docker compose exec re-parses the Compose file, which requires
+    # IAM_LAB_DB_PASSWORD even when the running container already exists.
+    # Target the *verified* container directly; never weaken its port guard.
+    run = subprocess.run(["docker", "exec", "-i", DB_CONTAINER,
+                          "psql", "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1",
                           "-U", "iam_app", "-d", "iamdb"],
                          input=sql, text=True, capture_output=True)
     if run.returncode:
-        raise RuntimeError("IAM-only fixture SQL failed; inspect lab database health (details suppressed)")
+        # Do not echo stderr: it can include SQL text or other lab data.
+        raise RuntimeError("IAM-only fixture SQL failed (redacted); check database schema and container state")
     return run.stdout.strip()
 
 
