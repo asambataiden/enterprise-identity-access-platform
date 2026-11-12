@@ -197,6 +197,18 @@ The **new 201 result is not yet verified**; keep the PR open until observed. The
 
 **Next non-secret diagnostic:** the smoke script now prints only whether the `WWW-Authenticate` response header is a standard Bearer `insufficient_scope` challenge (True/False), without revealing the header's raw value, token or body. If true, investigate Spring Security authority conversion; if false, inspect server-side actor lookup and actual Java runtime datasource. Do not disable scope checks or add an application grant to make an expected status appear. Avoid repeated login attempts until this boundary is classified.
 
+## Root-cause correction: Spring Security ERROR dispatch masking HTTP 404
+
+**Observed:** real-token foreign-tenant request returned HTTP 403 with `WWW-Authenticate: Bearer ... insufficient_scope`, despite matching `tenant_id`, nonempty `sub`, and a successful guarded read-only join for the exact active local employee and permission. The same user previously completed a real HTTP 201 request. This led to a server-side error-dispatch explanation rather than a token mapping defect.
+
+**Source review:** `AccessRequestService.create` throws `IllegalArgumentException` for a cross-tenant target; `AccessRequestController` translates it to `ResponseStatusException(HttpStatus.NOT_FOUND)`. The HTTP security chain allowed the API endpoint and health but ended with `anyRequest().denyAll()`. Spring Boot invokes `/error` with `DispatcherType.ERROR` for some error statuses. Spring Security authorizes that dispatch again; denying it can mask the intended 404 as a second 403 Bearer `insufficient_scope`. Spring Security's official `authorizeHttpRequests` guide recommends permitting `DispatcherType.ERROR` for such cases.
+
+**Narrow correction:** in `BootstrapSecurityConfiguration`, permit *only* `DispatcherType.ERROR` before the original matcher rules. **Do not globally permit `/error` for regular HTTP REQUEST dispatches, do not permit FORWARD dispatches, do not relax the bearer scope requirement or change application permissions.** Added MockMvc tests asserting an ERROR dispatch preserves 404 and a direct unauthenticated `GET /error` is still denied. Note that MockMvc does not always reproduce embedded servlet container redispatch semantics; therefore a **fresh restarted Java server plus a real signed-token HTTP 404** is the required final confirmation.
+
+**Operator validation:** After pulling the branch, *restart only the existing IAM Java API process on port 8082* so it loads the new filter-chain configuration. Leave Keycloak/PostgreSQL running. Then rerun the existing `--expect-status 404` cross-tenant PKCE command once. If successful, proceed with HTTP 409 and revoke-403 checks. If not, inspect servlet error dispatcher details; do not keep rerunning login without new evidence.
+
+Reference: https://docs.spring.io/spring-security/reference/servlet/authorization/authorize-http-requests.html
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
