@@ -173,6 +173,64 @@ class ApprovalDecisionServiceIT {
         }
     }
 
+    @Test
+    void approvalPersistsMatchingAuditEventAtomically() {
+        service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED);
+        assertEquals(1L, jdbc.queryForObject("""
+            SELECT count(*) FROM approval_audit_events a JOIN access_decisions d
+              ON a.tenant_id=d.tenant_id AND a.request_id=d.request_id
+             WHERE a.tenant_id=? AND a.request_id=?
+               AND a.approver_id=d.approver_id AND a.requester_id=d.requester_id
+               AND a.outcome=d.decision AND a.occurred_at=d.decided_at
+               AND a.event_type='ACCESS_REQUEST_DECIDED'
+            """, Long.class, tenant, requestId));
+        assertThrows(IllegalStateException.class,
+                () -> service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.REJECTED));
+        assertEquals(1L, jdbc.queryForObject("""
+            SELECT count(*) FROM approval_audit_events WHERE tenant_id=? AND request_id=?
+            """, Long.class, tenant, requestId));
+    }
+
+    @Test
+    void deniedApprovalCreatesNoAuditEvidence() {
+        assertThrows(SecurityException.class,
+                () -> service.decide(tenant, requester, requestId, ApprovalDecisionService.Decision.REJECTED));
+        assertEquals(0L, jdbc.queryForObject("""
+            SELECT count(*) FROM approval_audit_events WHERE tenant_id=? AND request_id=?
+            """, Long.class, tenant, requestId));
+    }
+
+    @Test
+    void auditEvidenceRejectsUpdateAndDelete() {
+        service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.REJECTED);
+        assertThrows(org.springframework.dao.DataAccessException.class, () -> jdbc.update("""
+            UPDATE approval_audit_events SET outcome='APPROVED' WHERE tenant_id=? AND request_id=?
+            """, tenant, requestId));
+        assertThrows(org.springframework.dao.DataAccessException.class, () -> jdbc.update("""
+            DELETE FROM approval_audit_events WHERE tenant_id=? AND request_id=?
+            """, tenant, requestId));
+        assertEquals("REJECTED", jdbc.queryForObject("""
+            SELECT outcome FROM approval_audit_events WHERE tenant_id=? AND request_id=?
+            """, String.class, tenant, requestId));
+    }
+
+    @Test
+    void auditInsertionFailureRollsBackRequestAndDecision() {
+        // Emulate an audit storage conflict without disabling the production trigger.
+        jdbc.update("""
+            INSERT INTO approval_audit_events
+              (tenant_id,request_id,requester_id,approver_id,outcome)
+            VALUES (?,?,?,?,'APPROVED')
+            """, tenant, requestId, requester, approver);
+        assertThrows(org.springframework.dao.DataAccessException.class,
+                () -> service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED));
+        assertEquals("PENDING", status());
+        assertEquals(0, decisions());
+        assertEquals(1L, jdbc.queryForObject("""
+            SELECT count(*) FROM approval_audit_events WHERE tenant_id=? AND request_id=?
+            """, Long.class, tenant, requestId));
+    }
+
     private boolean tryDecision(CountDownLatch gate, UUID actor, ApprovalDecisionService.Decision decision)
             throws InterruptedException {
         gate.await();
