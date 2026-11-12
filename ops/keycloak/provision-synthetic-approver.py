@@ -97,7 +97,8 @@ def main():
     if exists != "1":
         raise RuntimeError("Synthetic tenant fixture missing; refusing to modify Keycloak")
     token=admin_token()
-    subject=provision_user(token,tenant,args.rotate_password,allow_create=not args.revoke)
+    # Constrain external Keycloak ID before interpolating into local lab SQL.
+    subject=str(uuid.UUID(provision_user(token,tenant,args.rotate_password,allow_create=not args.revoke)))
     mapping=fixture.psql(f"""SELECT count(*) FROM employee_identities
 WHERE tenant_id='{tenant}' AND issuer='{ISSUER}' AND subject='{subject}';""")
     if mapping not in ("0","1"):
