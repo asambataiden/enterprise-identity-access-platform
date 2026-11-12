@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import http.server
 import json
+import os
 from pathlib import Path
 import secrets
 import sys
@@ -50,6 +51,8 @@ def main():
     parser.add_argument("--idempotency-key", help="Stable test-only key to verify retries/conflicts")
     parser.add_argument("--expect-status", type=int, choices=[201, 403, 404, 409],
                         help="Fail if the real API status differs")
+    parser.add_argument("--expected-tenant-id", default=os.getenv("IAM_LAB_TENANT_ID"),
+                        help="Synthetic fixture tenant UUID (required for local binding diagnosis)")
     parser.add_argument("--diagnose-local-binding", action="store_true",
                         help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
     parser.add_argument("--repeat-on-success", action="store_true",
@@ -165,7 +168,9 @@ def main():
         spec = importlib.util.spec_from_file_location("iam_lab_fixture", fixture_path)
         fixture = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(fixture)
-        expected_tenant = uuid.UUID("8230545d-3560-41e6-af0b-b1ef50778606")
+        if not args.expected_tenant_id:
+            raise RuntimeError("Set IAM_LAB_TENANT_ID or --expected-tenant-id for local binding diagnosis")
+        expected_tenant = uuid.UUID(args.expected_tenant_id)
         try:
             actual_tenant = uuid.UUID(str(claims.get("tenant_id", "")))
             subject = uuid.UUID(str(claims.get("sub", "")))
@@ -175,6 +180,8 @@ def main():
         if issuer != ISSUER:
             raise RuntimeError("Token issuer differs from local expected issuer")
         print("Diagnostic: token tenant matches fixture:", actual_tenant == expected_tenant)
+        if actual_tenant != expected_tenant:
+            raise RuntimeError("Token tenant does not match the provisioned synthetic fixture tenant")
         sql = ("""
 SELECT count(*)
 FROM employee_identities i
