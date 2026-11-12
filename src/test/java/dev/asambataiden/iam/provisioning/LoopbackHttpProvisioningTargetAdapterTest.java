@@ -13,8 +13,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -110,7 +110,7 @@ class LoopbackHttpProvisioningTargetAdapterTest {
                 }
                 if (corruptReadback.get()) {
                     JsonNode changed = json.readTree(raw);
-                    ((com.fasterxml.jackson.databind.node.ObjectNode) changed).put("roleKey", "ADMIN");
+                    ((tools.jackson.databind.node.ObjectNode) changed).put("roleKey", "ADMIN");
                     reply(exchange, 200, json.writeValueAsString(changed));
                 } else {
                     reply(exchange, 200, raw);
