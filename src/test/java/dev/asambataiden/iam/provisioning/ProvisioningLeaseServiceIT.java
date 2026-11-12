@@ -134,6 +134,28 @@ class ProvisioningLeaseServiceIT {
     }
 
     @Test
+    void finalAttemptCrashQuarantinesExpiredLease() {
+        approve();
+        for (int attempt = 1; attempt < 3; attempt++) {
+            var lease = leases.claim(tenant, 30).orElseThrow();
+            assertTrue(leases.fail(lease, ProvisioningLeaseService.FailureCode.TIMEOUT, 1));
+            jdbc.update("""
+                UPDATE provisioning_work_items SET next_attempt_at=CURRENT_TIMESTAMP - interval '1 second'
+                 WHERE tenant_id=? AND request_id=?
+                """, tenant, requestId);
+        }
+        var last = leases.claim(tenant, 30).orElseThrow();
+        assertEquals(3, last.attempt());
+        jdbc.update("""
+            UPDATE provisioning_work_items SET lease_expires_at=CURRENT_TIMESTAMP - interval '1 second'
+             WHERE tenant_id=? AND request_id=?
+            """, tenant, requestId);
+        assertTrue(leases.claim(tenant, 30).isEmpty());
+        assertEquals("QUARANTINED", state());
+        assertFalse(leases.renew(last, 30));
+    }
+
+    @Test
     void tenantIsolationAndInputValidation() {
         approve();
         assertTrue(leases.claim(UUID.randomUUID(), 30).isEmpty());
