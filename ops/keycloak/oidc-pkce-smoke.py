@@ -45,7 +45,18 @@ def main():
                         help="Loopback IAM API URL for safe negative smoke test")
     parser.add_argument("--employee-id", help="Synthetic employee UUID (requires authorized local fixture)")
     parser.add_argument("--application-id", help="Synthetic application UUID (requires authorized local fixture)")
+    parser.add_argument("--idempotency-key", help="Stable test-only key to verify retries/conflicts")
+    parser.add_argument("--expect-status", type=int, choices=[201, 403, 404, 409],
+                        help="Fail if the real API status differs")
+    parser.add_argument("--repeat-on-success", action="store_true",
+                        help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.repeat_on_success and args.expect_status != 201:
+        parser.error("--repeat-on-success requires --expect-status 201")
+    if args.idempotency_key and (len(args.idempotency_key) > 128 or
+                                  not args.idempotency_key.strip() or
+                                  args.idempotency_key != args.idempotency_key.strip()):
+        parser.error("Invalid idempotency key")
     if (args.employee_id is None) != (args.application_id is None):
         parser.error("--employee-id and --application-id must be supplied together")
     parsed_api = urllib.parse.urlparse(args.api_url)
@@ -147,20 +158,43 @@ def main():
     application_id = args.application_id or str(uuid.uuid4())
     body = json.dumps({"employeeId": employee_id, "applicationId": application_id,
                        "roleKey": "READER"}).encode()
-    request = urllib.request.Request(args.api_url, data=body, method="POST",
-                                     headers={"Authorization": "Bearer " + access_token,
-                                              "Content-Type": "application/json",
-                                              "Idempotency-Key": "lab-" + secrets.token_urlsafe(16)})
-    try:
-        with urllib.request.urlopen(request, timeout=12) as response:
-            print("API HTTP status:", response.status)
-    except urllib.error.HTTPError as error:
-        print("API HTTP status:", error.code, "(response body deliberately hidden)")
-        if error.code == 401:
-            raise RuntimeError("Resource server rejected authentication; inspect issuer/JWKS/audience") from None
-        if error.code == 403:
-            print("Authorization denied: expected until explicit identity + permission mapping exists.")
-    print("Do not interpret this helper as a completed positive access-request test.")
+    key = args.idempotency_key or "lab-" + secrets.token_urlsafe(16)
+    headers = {"Authorization": "Bearer " + access_token,
+               "Content-Type": "application/json",
+               "Idempotency-Key": key}
+
+    def post_once():
+        request = urllib.request.Request(args.api_url, data=body, method="POST", headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as error:
+            return error.code, None  # discard body to avoid leaking authorization details
+
+    code, data = post_once()
+    print("API HTTP status:", code, "(response body not displayed)")
+    if code == 401:
+        raise RuntimeError("Resource server rejected authentication; inspect issuer/JWKS/audience")
+    if args.expect_status is not None and code != args.expect_status:
+        raise RuntimeError(f"Expected HTTP {args.expect_status} but observed HTTP {code}")
+    if code == 201:
+        if not isinstance(data, dict) or data.get("status") != "PENDING" or not data.get("id"):
+            raise RuntimeError("201 response missing persisted PENDING request identity")
+        print("PASS: authorized request persisted as PENDING")
+        if args.repeat_on_success:
+            retried_code, retried_data = post_once()
+            if retried_code != 201 or not isinstance(retried_data, dict) or retried_data.get("id") != data["id"]:
+                raise RuntimeError("Idempotent retry failed: HTTP status or request ID changed")
+            print("PASS: equivalent retry preserved request ID")
+    elif code == 403:
+        print("Authorization denied (verify intended grant state).")
+    elif code == 404:
+        print("Requested target unavailable in authenticated tenant.")
+    elif code == 409:
+        print("Existing idempotency key conflicts with changed request terms.")
+    if args.expect_status is None:
+        print("No expectation asserted; use --expect-status to turn this into verification evidence.")
+
 
 
 if __name__ == "__main__":
