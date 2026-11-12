@@ -41,12 +41,19 @@ The fixture prints three test request IDs. Use the printed **APPROVE** and **REJ
 
 ## Real-token decision test
 
-A. With the **approver** logged into Keycloak:
+A. Copy the synthetic UUIDs printed by the request fixture into shell variables (do not include angle-bracket placeholders):
+
+```bash
+APPROVE_REQUEST_ID="paste-printed-LAB_03D_APPROVE_REQUEST_ID-here"
+REJECT_REQUEST_ID="paste-printed-LAB_03D_REJECT_REQUEST_ID-here"
+```
+
+With the **approver** logged into Keycloak:
 
 ```bash
 python3 ops/keycloak/oidc-pkce-smoke.py \
   --scope access:decide \
-  --decision-request-id <LAB_03D_APPROVE_REQUEST_ID> \
+  --decision-request-id "$APPROVE_REQUEST_ID" \
   --decision APPROVED \
   --expect-status 200
 ```
@@ -56,7 +63,7 @@ B. With the approver on the separate REJECT request:
 ```bash
 python3 ops/keycloak/oidc-pkce-smoke.py \
   --scope access:decide \
-  --decision-request-id <LAB_03D_REJECT_REQUEST_ID> \
+  --decision-request-id "$REJECT_REQUEST_ID" \
   --decision REJECTED \
   --expect-status 200
 ```
