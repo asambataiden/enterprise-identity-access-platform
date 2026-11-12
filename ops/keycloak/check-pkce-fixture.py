@@ -20,6 +20,7 @@ assert "access:request" in client["optionalClientScopes"]
 mappers = {m["protocolMapper"]: m for m in client["protocolMappers"]}
 assert mappers["oidc-audience-mapper"]["config"]["included.custom.audience"] == "iam-governance-api"
 assert mappers["oidc-usermodel-attribute-mapper"]["config"]["claim.name"] == "tenant_id"
+assert mappers["oidc-sub-mapper"]["config"]["access.token.claim"] == "true"
 scopes = [s for s in data["clientScopes"] if s["name"] == "access:request"]
 assert len(scopes) == 1 and scopes[0]["attributes"]["include.in.token.scope"] == "true"
 print("PASS: no-password-grant PKCE client, strict callback, audience, tenant mapping, optional scope")

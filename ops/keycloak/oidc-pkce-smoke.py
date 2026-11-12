@@ -7,8 +7,11 @@ Do not use outside the isolated iam-lab developer environment.
 import argparse
 import base64
 import hashlib
+import importlib.util
 import http.server
 import json
+import os
+from pathlib import Path
 import secrets
 import sys
 import time
@@ -45,7 +48,22 @@ def main():
                         help="Loopback IAM API URL for safe negative smoke test")
     parser.add_argument("--employee-id", help="Synthetic employee UUID (requires authorized local fixture)")
     parser.add_argument("--application-id", help="Synthetic application UUID (requires authorized local fixture)")
+    parser.add_argument("--idempotency-key", help="Stable test-only key to verify retries/conflicts")
+    parser.add_argument("--expect-status", type=int, choices=[201, 403, 404, 409],
+                        help="Fail if the real API status differs")
+    parser.add_argument("--expected-tenant-id", default=os.getenv("IAM_LAB_TENANT_ID"),
+                        help="Synthetic fixture tenant UUID (required for local binding diagnosis)")
+    parser.add_argument("--diagnose-local-binding", action="store_true",
+                        help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
+    parser.add_argument("--repeat-on-success", action="store_true",
+                        help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.repeat_on_success and args.expect_status != 201:
+        parser.error("--repeat-on-success requires --expect-status 201")
+    if args.idempotency_key and (len(args.idempotency_key) > 128 or
+                                  not args.idempotency_key.strip() or
+                                  args.idempotency_key != args.idempotency_key.strip()):
+        parser.error("Invalid idempotency key")
     if (args.employee_id is None) != (args.application_id is None):
         parser.error("--employee-id and --application-id must be supplied together")
     parsed_api = urllib.parse.urlparse(args.api_url)
@@ -143,24 +161,105 @@ def main():
     print("  tenant_id present:", bool(claims.get("tenant_id")))
     print("Access token intentionally not displayed or saved.")
 
+    if args.diagnose_local_binding:
+        # This is a controlled local diagnostic, not a production auth check.
+        # JWT claims are NOT signature-verified by Python. The Java API verifies JWTs.
+        fixture_path = Path(__file__).resolve().with_name("seed-authorized-iam-fixture.py")
+        spec = importlib.util.spec_from_file_location("iam_lab_fixture", fixture_path)
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        if not args.expected_tenant_id:
+            raise RuntimeError("Set IAM_LAB_TENANT_ID or --expected-tenant-id for local binding diagnosis")
+        expected_tenant = uuid.UUID(args.expected_tenant_id)
+        # Diagnose claim representation without disclosing identifiers or tokens.
+        # OAuth/OIDC 'sub' is an opaque string; it does NOT need to be a UUID.
+        tenant_claim = claims.get("tenant_id")
+        subject_claim = claims.get("sub")
+        print("Diagnostic: tenant_id claim type:", type(tenant_claim).__name__)
+        print("Diagnostic: sub claim type:", type(subject_claim).__name__)
+        try:
+            actual_tenant = uuid.UUID(tenant_claim) if isinstance(tenant_claim, str) else None
+        except ValueError:
+            actual_tenant = None
+        print("Diagnostic: tenant_id is UUID string:", actual_tenant is not None)
+        print("Diagnostic: sub is nonempty string:",
+              isinstance(subject_claim, str) and bool(subject_claim))
+        if actual_tenant is None:
+            raise RuntimeError("tenant_id is not a UUID string; inspect Keycloak protocol mapper configuration")
+        if not isinstance(subject_claim, str) or not subject_claim or len(subject_claim) > 255:
+            raise RuntimeError("sub is not an acceptable opaque subject string")
+        # Quote escaping is required because OIDC subjects are opaque strings.
+        safe_subject = subject_claim.replace("'", "''")
+        issuer = claims.get("iss")
+        if issuer != ISSUER:
+            raise RuntimeError("Token issuer differs from local expected issuer")
+        print("Diagnostic: token tenant matches fixture:", actual_tenant == expected_tenant)
+        if actual_tenant != expected_tenant:
+            raise RuntimeError("Token tenant does not match the provisioned synthetic fixture tenant")
+        sql = ("""
+SELECT count(*)
+FROM employee_identities i
+JOIN employees e ON e.tenant_id=i.tenant_id AND e.id=i.employee_id
+JOIN employee_permissions p
+  ON p.tenant_id=e.tenant_id AND p.employee_id=e.id
+WHERE i.tenant_id='""" + str(actual_tenant) + """'
+  AND i.issuer='http://127.0.0.1:8281/realms/iam-lab'
+  AND i.subject='""" + safe_subject + """'
+  AND e.lifecycle_status='ACTIVE'
+  AND p.permission_key='ACCESS_REQUEST_CREATE';
+""")
+        matching = fixture.psql(sql).strip()
+        print("Diagnostic: exact token actor has local active grant:", matching == "1")
+        if matching != "1":
+            print("Diagnostic: no exact active grant for this login token in isolated IAM DB.")
+
     employee_id = args.employee_id or str(uuid.uuid4())
     application_id = args.application_id or str(uuid.uuid4())
     body = json.dumps({"employeeId": employee_id, "applicationId": application_id,
                        "roleKey": "READER"}).encode()
-    request = urllib.request.Request(args.api_url, data=body, method="POST",
-                                     headers={"Authorization": "Bearer " + access_token,
-                                              "Content-Type": "application/json",
-                                              "Idempotency-Key": "lab-" + secrets.token_urlsafe(16)})
-    try:
-        with urllib.request.urlopen(request, timeout=12) as response:
-            print("API HTTP status:", response.status)
-    except urllib.error.HTTPError as error:
-        print("API HTTP status:", error.code, "(response body deliberately hidden)")
-        if error.code == 401:
-            raise RuntimeError("Resource server rejected authentication; inspect issuer/JWKS/audience") from None
-        if error.code == 403:
-            print("Authorization denied: expected until explicit identity + permission mapping exists.")
-    print("Do not interpret this helper as a completed positive access-request test.")
+    key = args.idempotency_key or "lab-" + secrets.token_urlsafe(16)
+    headers = {"Authorization": "Bearer " + access_token,
+               "Content-Type": "application/json",
+               "Idempotency-Key": key}
+
+    def post_once():
+        request = urllib.request.Request(args.api_url, data=body, method="POST", headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as error:
+            # Classify a standard bearer error without logging headers or credentials.
+            challenge = error.headers.get("WWW-Authenticate", "")
+            if error.code == 403:
+                print("Diagnostic: bearer insufficient_scope challenge:",
+                      challenge.lower().startswith("bearer ") and
+                      "insufficient_scope" in challenge.lower())
+            return error.code, None  # discard body to avoid leaking authorization details
+
+    code, data = post_once()
+    print("API HTTP status:", code, "(response body not displayed)")
+    if code == 401:
+        raise RuntimeError("Resource server rejected authentication; inspect issuer/JWKS/audience")
+    if args.expect_status is not None and code != args.expect_status:
+        raise RuntimeError(f"Expected HTTP {args.expect_status} but observed HTTP {code}")
+    if code == 201:
+        if not isinstance(data, dict) or data.get("status") != "PENDING" or not data.get("id"):
+            raise RuntimeError("201 response missing persisted PENDING request identity")
+        print("PASS: authorized request persisted as PENDING")
+        if args.repeat_on_success:
+            retried_code, retried_data = post_once()
+            if retried_code != 201 or not isinstance(retried_data, dict) or retried_data.get("id") != data["id"]:
+                raise RuntimeError("Idempotent retry failed: HTTP status or request ID changed")
+            print("PASS: equivalent retry preserved request ID")
+    elif code == 403:
+        print("Authorization denied (verify intended grant state).")
+    elif code == 404:
+        print("Requested target unavailable in authenticated tenant.")
+    elif code == 409:
+        print("Existing idempotency key conflicts with changed request terms.")
+    if args.expect_status is None:
+        print("No expectation asserted; use --expect-status to turn this into verification evidence.")
+
 
 
 if __name__ == "__main__":
