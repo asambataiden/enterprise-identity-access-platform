@@ -50,18 +50,25 @@ public final class MockProvisioningOrchestrator {
         }
         var identity = identities.getFirst();
         String key = ProvisioningAttemptJournal.idempotencyKey(lease.tenantId(), lease.requestId());
-        try {
-            target.apply(identity, key);
-        } catch (IllegalStateException uncertain) {
-            // A lost acknowledgement can follow a successful remote write.
-            // Continue to independent readback rather than assuming failure.
-        }
         MockTargetObservationJournal.Outcome outcome;
         try {
-            outcome = target.isEffective(identity)
-                    ? MockTargetObservationJournal.Outcome.VERIFIED
-                    : MockTargetObservationJournal.Outcome.ABSENT;
-        } catch (IllegalStateException uncertain) {
+            // Reconciliation first: the prior attempt might have applied the
+            // entitlement before its acknowledgement or observation was lost.
+            if (target.isEffective(identity)) {
+                outcome = MockTargetObservationJournal.Outcome.VERIFIED;
+            } else {
+                try {
+                    target.apply(identity, key);
+                } catch (IllegalStateException uncertain) {
+                    // An acknowledgement may be lost after a successful POST.
+                    // Re-read the mock target before classifying the attempt.
+                }
+                outcome = target.isEffective(identity)
+                        ? MockTargetObservationJournal.Outcome.VERIFIED
+                        : MockTargetObservationJournal.Outcome.ABSENT;
+            }
+        } catch (IllegalStateException uncertainReadback) {
+            // Never issue a speculative POST if initial readback is uncertain.
             outcome = MockTargetObservationJournal.Outcome.UNKNOWN;
         }
         if (!observations.record(lease, outcome)) {
