@@ -22,6 +22,7 @@ jobs:
           bash -n ops/keycloak/check-metadata.sh
           python3 ops/keycloak/check-pkce-fixture.py
           python3 -m py_compile ops/keycloak/oidc-pkce-smoke.py ops/keycloak/provision-synthetic-user.py ops/keycloak/seed-authorized-iam-fixture.py
+          python3 ops/keycloak/test_seed_authorized_iam_fixture.py
           docker compose -f ops/keycloak/compose.yaml config --quiet --no-interpolate
       - name: Verify Java baseline
         run: mvn -B --no-transfer-progress clean verify
