@@ -17,6 +17,14 @@
         "include.in.token.scope": "true",
         "display.on.consent.screen": "false"
       }
+    },
+    {
+      "name": "access:decide",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
     }
   ],
   "clients": [
@@ -40,7 +48,8 @@
         "pkce.code.challenge.method": "S256"
       },
       "optionalClientScopes": [
-        "access:request"
+        "access:request",
+        "access:decide"
       ],
       "protocolMappers": [
         {
