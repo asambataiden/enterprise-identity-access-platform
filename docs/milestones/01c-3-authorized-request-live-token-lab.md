@@ -185,7 +185,7 @@ The **new 201 result is not yet verified**; keep the PR open until observed. The
 - Running the real API POST with synthetic target employee `3ee649c4-ff4e-5f57-96c7-d9885fbfff04`, application `0f072d55-aadd-51c5-a04d-1bff3315dec7` and idempotency key `iam-lab-positive-01` returned **HTTP 201**, `PASS: authorized request persisted as PENDING` and `PASS: equivalent retry preserved request ID`.
 - The token itself, password, bearer Authorization header, OAuth callback and confidential SQL details were **not displayed or saved**.
 
-**Boundary:** This validates authorized access-request intake and idempotent retry, not approval, entitlement provisioning, token rotation, distributed performance, or an automated live-Keycloak test in CI. Real-token cross-tenant 404, idempotency-conflict 409 and grant-revocation 403 still await local operator evidence.
+**Boundary:** This validates authorized access-request intake and idempotent retry, not approval, entitlement provisioning, token rotation, distributed performance, or an automated live-Keycloak test in CI. Real-token cross-tenant 404 is now verified (see operator evidence below); idempotency-conflict 409 and grant-revocation 403 still await local operator evidence.
 
 **Interview explanation:** Identity-provider JWT validity and presence of `access:request` scope are necessary but not sufficient. The API binds the signed principal's `iss/sub/tenant_id` to an active tenant-scoped employee with explicit permission. Because `sub` was absent, the system denied the earlier attempt; enabling the built-in subject mapper restored authorization without relaxing Java security checks. Database uniqueness preserves idempotency across retries.
 
@@ -209,11 +209,17 @@ The **new 201 result is not yet verified**; keep the PR open until observed. The
 
 Reference: https://docs.spring.io/spring-security/reference/servlet/authorization/authorize-http-requests.html
 
+## Verified operator evidence — real-token cross-tenant isolation (12 November 2026)
+
+**Observed:** with the lab IAM API reporting `{"status":"UP"}`, the Keycloak Authorization Code + PKCE helper sent a real access token and requested foreign-tenant employee `2166ca53-e6bf-55f2-8fc5-d2d869c768b2` with the local synthetic application `0f072d55-aadd-51c5-a04d-1bff3315dec7`. The API returned **HTTP 404** and the helper reported `Requested target unavailable in authenticated tenant.` There was **no test failure**. Earlier real-token 403 responses on the same case were resolved after the narrow Spring Security ERROR dispatch correction was pulled and the IAM API became healthy. This verifies the externally observable 404 response; it does not by itself establish internal control-flow tracing.
+
+**Status:** real-token 201 PENDING + stable idempotent retry and foreign-tenant 404 are verified. The changed-payload same-key **409** and explicit grant-revocation **403** still require operator evidence. Never merge this milestone based solely on unit tests.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
 - Added JUnit/Testcontainers cases (mock JWT policy, **not** live signed tokens): revoked permission => 403, foreign-tenant target => 404, reused key with different terms => 409.
-- Real Keycloak 201/retry/404/revoke-403 evidence: **pending operator execution**, do not describe as verified until actual output reviewed.
+- Real Keycloak HTTP 201 + PENDING + stable idempotency retry and cross-tenant HTTP 404: **verified by operator output** on 12 November 2026. Real-token changed-payload same-key HTTP 409 and revoke-403: **pending**.
 - Run `mvn -B --no-transfer-progress clean verify` and check GitHub CI before merge.
 - Test identity is fictional; do not use project/company real user identities or emails.
 
