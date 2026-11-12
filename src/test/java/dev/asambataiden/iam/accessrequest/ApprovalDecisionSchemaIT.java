@@ -35,6 +35,7 @@ class ApprovalDecisionSchemaIT {
 
     @BeforeEach
     void fixtures() {
+        jdbc.update("DELETE FROM provisioning_work_items");
         jdbc.update("DELETE FROM access_decisions");
         jdbc.update("DELETE FROM access_requests");
         jdbc.update("DELETE FROM employee_permissions");
@@ -88,6 +89,25 @@ class ApprovalDecisionSchemaIT {
         assertThrows(DataIntegrityViolationException.class,
                 () -> decide(tenant, requestId, requester, approver, "REJECTED"),
                 "Primary key forbids multiple decisions for one request");
+    }
+
+    @Test
+    void directSchemaApprovalStillProducesOneIntentButRejectionDoesNot() {
+        decide(tenant, requestId, requester, approver, "APPROVED");
+        assertEquals(1L, jdbc.queryForObject("""
+            SELECT count(*) FROM provisioning_work_items
+             WHERE tenant_id=? AND request_id=? AND state='READY'
+            """, Long.class, tenant, requestId));
+        assertThrows(DataIntegrityViolationException.class,
+                () -> jdbc.update("""
+                    INSERT INTO provisioning_work_items(tenant_id,request_id)
+                    VALUES (?,?)
+                    """, tenant, requestId));
+        assertThrows(DataIntegrityViolationException.class,
+                () -> jdbc.update("""
+                    INSERT INTO provisioning_work_items(tenant_id,request_id,approval_outcome)
+                    VALUES (?,?,'REJECTED')
+                    """, tenant, requestId));
     }
 
     @Test
