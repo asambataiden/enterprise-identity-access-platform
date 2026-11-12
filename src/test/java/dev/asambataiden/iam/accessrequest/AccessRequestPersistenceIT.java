@@ -229,6 +229,79 @@ class AccessRequestPersistenceIT {
         }
     }
 
+
+    @Test
+    void revokingLocalPermissionRestoresForbiddenEvenWithValidScope() throws Exception {
+        jdbc.update("INSERT INTO employee_identities (tenant_id,employee_id,issuer,subject) VALUES (?,?,?,?)",
+                tenant, actor, "http://127.0.0.1:8281/realms/iam-lab", "synthetic-user");
+        jdbc.update("INSERT INTO employee_permissions (tenant_id,employee_id,permission_key) VALUES (?,?,'ACCESS_REQUEST_CREATE')",
+                tenant, actor);
+        jdbc.update("DELETE FROM employee_permissions WHERE tenant_id=? AND employee_id=?", tenant, actor);
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(post("/api/v1/access-requests")
+                .with(jwt().jwt(builder -> builder
+                        .issuer("http://127.0.0.1:8281/realms/iam-lab")
+                        .subject("synthetic-user").claim("tenant_id", tenant.toString()))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_access:request")))
+                .header("Idempotency-Key", "revoked-actor")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(employee, application)))
+                .andExpect(status().isForbidden());
+        assertEquals(0, count());
+    }
+
+    @Test
+    void mappedActorCannotRequestEmployeeBelongingToAnotherTenantOverHttp() throws Exception {
+        UUID outsideTenant = UUID.randomUUID();
+        UUID outsideEmployee = UUID.randomUUID();
+        jdbc.update("INSERT INTO tenants(id,name) VALUES (?,?)", outsideTenant, "foreign-" + outsideTenant);
+        jdbc.update("INSERT INTO employees(tenant_id,id,lifecycle_status) VALUES (?,?,'ACTIVE')",
+                outsideTenant, outsideEmployee);
+        jdbc.update("INSERT INTO employee_identities (tenant_id,employee_id,issuer,subject) VALUES (?,?,?,?)",
+                tenant, actor, "http://127.0.0.1:8281/realms/iam-lab", "synthetic-user");
+        jdbc.update("INSERT INTO employee_permissions (tenant_id,employee_id,permission_key) VALUES (?,?,'ACCESS_REQUEST_CREATE')",
+                tenant, actor);
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        mvc.perform(post("/api/v1/access-requests")
+                .with(jwt().jwt(builder -> builder
+                        .issuer("http://127.0.0.1:8281/realms/iam-lab")
+                        .subject("synthetic-user").claim("tenant_id", tenant.toString()))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_access:request")))
+                .header("Idempotency-Key", "cross-tenant-subject")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(outsideEmployee, application)))
+                .andExpect(status().isNotFound());
+        assertEquals(0, count());
+    }
+
+    @Test
+    void differentBusinessTermsWithSameHttpIdempotencyKeyReturnConflict() throws Exception {
+        jdbc.update("INSERT INTO employee_identities (tenant_id,employee_id,issuer,subject) VALUES (?,?,?,?)",
+                tenant, actor, "http://127.0.0.1:8281/realms/iam-lab", "synthetic-user");
+        jdbc.update("INSERT INTO employee_permissions (tenant_id,employee_id,permission_key) VALUES (?,?,'ACCESS_REQUEST_CREATE')",
+                tenant, actor);
+        var mvc = MockMvcBuilders.webAppContextSetup(webContext).apply(springSecurity()).build();
+        var identity = jwt().jwt(builder -> builder
+                .issuer("http://127.0.0.1:8281/realms/iam-lab")
+                .subject("synthetic-user").claim("tenant_id", tenant.toString()))
+                .authorities(new SimpleGrantedAuthority("SCOPE_access:request"));
+        mvc.perform(post("/api/v1/access-requests").with(identity)
+                .header("Idempotency-Key", "same-key-different-terms")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(employee, application)))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/v1/access-requests")
+                .with(jwt().jwt(builder -> builder
+                        .issuer("http://127.0.0.1:8281/realms/iam-lab")
+                        .subject("synthetic-user").claim("tenant_id", tenant.toString()))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_access:request")))
+                .header("Idempotency-Key", "same-key-different-terms")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(requestBody(actor, application)))
+                .andExpect(status().isConflict());
+        assertEquals(1, count());
+    }
+
     private int count() {
         return jdbc.queryForObject("SELECT count(*) FROM access_requests", Integer.class);
     }
