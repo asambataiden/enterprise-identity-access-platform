@@ -49,15 +49,30 @@ def main():
     parser.add_argument("--employee-id", help="Synthetic employee UUID (requires authorized local fixture)")
     parser.add_argument("--application-id", help="Synthetic application UUID (requires authorized local fixture)")
     parser.add_argument("--idempotency-key", help="Stable test-only key to verify retries/conflicts")
-    parser.add_argument("--expect-status", type=int, choices=[201, 403, 404, 409],
+    parser.add_argument("--expect-status", type=int, choices=[200, 201, 403, 404, 409],
                         help="Fail if the real API status differs")
     parser.add_argument("--expected-tenant-id", default=os.getenv("IAM_LAB_TENANT_ID"),
                         help="Synthetic fixture tenant UUID (required for local binding diagnosis)")
     parser.add_argument("--diagnose-local-binding", action="store_true",
                         help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
+    parser.add_argument("--scope", choices=["access:request", "access:decide"], default="access:request",
+                        help="Optional OAuth scope to request for the synthetic login")
+    parser.add_argument("--decision-request-id", help="Synthetic PENDING access request UUID for approval")
+    parser.add_argument("--decision", choices=["APPROVED", "REJECTED"], default="APPROVED")
     parser.add_argument("--repeat-on-success", action="store_true",
                         help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.decision_request_id:
+        try:
+            uuid.UUID(args.decision_request_id)
+        except ValueError:
+            parser.error("--decision-request-id must be a valid UUID")
+        if args.scope != "access:decide":
+            parser.error("Decision mode requires --scope access:decide")
+        if args.employee_id or args.application_id or args.repeat_on_success:
+            parser.error("Decision mode cannot combine creation fields or retry")
+    elif args.scope == "access:decide":
+        parser.error("--scope access:decide requires --decision-request-id")
     if args.repeat_on_success and args.expect_status != 201:
         parser.error("--repeat-on-success requires --expect-status 201")
     if args.idempotency_key and (len(args.idempotency_key) > 128 or
@@ -112,7 +127,7 @@ def main():
         "client_id": CLIENT_ID,
         "redirect_uri": REDIRECT,
         "response_type": "code",
-        "scope": "openid access:request",
+        "scope": "openid " + args.scope,
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
@@ -157,7 +172,7 @@ def main():
     print("Informational decoded claims (signature NOT checked by this helper):")
     print("  issuer matches:", claims.get("iss") == ISSUER)
     print("  API audience present:", EXPECTED_AUD in audiences)
-    print("  access:request scope present:", "access:request" in scopes)
+    print("  requested scope present:", args.scope in scopes)
     print("  tenant_id present:", bool(claims.get("tenant_id")))
     print("Access token intentionally not displayed or saved.")
 
@@ -215,15 +230,20 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
 
     employee_id = args.employee_id or str(uuid.uuid4())
     application_id = args.application_id or str(uuid.uuid4())
-    body = json.dumps({"employeeId": employee_id, "applicationId": application_id,
-                       "roleKey": "READER"}).encode()
+    if args.decision_request_id:
+        body = json.dumps({"decision": args.decision}).encode()
+        target_url = args.api_url.rstrip("/") + "/" + args.decision_request_id + "/decision"
+    else:
+        body = json.dumps({"employeeId": employee_id, "applicationId": application_id,
+                           "roleKey": "READER"}).encode()
+        target_url = args.api_url
     key = args.idempotency_key or "lab-" + secrets.token_urlsafe(16)
     headers = {"Authorization": "Bearer " + access_token,
                "Content-Type": "application/json",
                "Idempotency-Key": key}
 
     def post_once():
-        request = urllib.request.Request(args.api_url, data=body, method="POST", headers=headers)
+        request = urllib.request.Request(target_url, data=body, method="POST", headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
                 return response.status, json.load(response)
@@ -242,7 +262,11 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
         raise RuntimeError("Resource server rejected authentication; inspect issuer/JWKS/audience")
     if args.expect_status is not None and code != args.expect_status:
         raise RuntimeError(f"Expected HTTP {args.expect_status} but observed HTTP {code}")
-    if code == 201:
+    if code == 200 and args.decision_request_id:
+        if not isinstance(data, dict) or data.get("decision") != args.decision or data.get("requestId") != args.decision_request_id:
+            raise RuntimeError("Decision response did not match synthetic request/outcome")
+        print("PASS: authenticated approval decision persisted (no provisioning verified here)")
+    elif code == 201:
         if not isinstance(data, dict) or data.get("status") != "PENDING" or not data.get("id"):
             raise RuntimeError("201 response missing persisted PENDING request identity")
         print("PASS: authorized request persisted as PENDING")
