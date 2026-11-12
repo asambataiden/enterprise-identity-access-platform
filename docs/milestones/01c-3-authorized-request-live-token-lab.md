@@ -135,6 +135,26 @@ Operator observed Keycloak OIDC issuer/JWKS PASS, IAM PostgreSQL `healthy`, Java
 
 **Operator recovery:** from the existing feature branch, run `git pull --ff-only origin feat/iam-real-token-authorized-request-lab` and retry `python3 ops/keycloak/seed-authorized-iam-fixture.py` with your existing `IAM_LAB_TENANT_ID` and admin variables. Do **not** reset Keycloak or delete any PostgreSQL containers; the fixture is transactional and seeded IDs are deterministic. If the fix does not resolve the error, investigate read-only Postgres logs, correct database schema and container identity without exposing secrets.
 
+## Positive-path diagnostic: verified 403 after successful fixture grant
+
+**Observed:** the synthetic fixture report showed active Keycloak issuer+subject mapping and `ACCESS_REQUEST_CREATE` present, but the next browser PKCE flow reported issuer/audience/scope/tenant claim flags true and HTTP **403** rather than expected 201. No PENDING creation was verified. Claim-presence flags alone do not prove the **value** of `tenant_id` equals the fixture tenant or that the browser login's `sub` matches the seeded employee identity. Also, the running Java process could be configured to use a different database. We must distinguish these causes before altering security behavior.
+
+**Read-only follow-up:** the PKCE helper supports `--diagnose-local-binding` and reads the existing `IAM_LAB_TENANT_ID` without exposing access tokens. It compares the decoded (informational, not signature-verified by Python) token tenant UUID to the intended lab fixture tenant, then runs a read-only join in the guarded IAM-only PostgreSQL container for the exact `iss/sub/tenant_id` and active permission. Java, not Python, validates the signed JWT. This diagnostic is *not* an authorization decision or production design.
+
+```bash
+git pull --ff-only origin feat/iam-real-token-authorized-request-lab
+export IAM_LAB_TENANT_ID=8230545d-3560-41e6-af0b-b1ef50778606
+python3 ops/keycloak/oidc-pkce-smoke.py \
+  --employee-id 3ee649c4-ff4e-5f57-96c7-d9885fbfff04 \
+  --application-id 0f072d55-aadd-51c5-a04d-1bff3315dec7 \
+  --idempotency-key iam-lab-positive-01 \
+  --expect-status 201 \
+  --repeat-on-success \
+  --diagnose-local-binding
+```
+
+If token tenant mismatch: correct the synthetic Keycloak user's `tenant_id` via the idempotent local provisioner, never weaken server-side checks. If local exact join is false: validate issuer/subject and binding for the actual login user. If both true but API still 403: inspect non-sensitive API security logs and confirm the running Java process points to `127.0.0.1:55432/iamdb` and is running the current code; do **not** disable Spring Security or grant broader permissions. A live positive result is still **pending**.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
