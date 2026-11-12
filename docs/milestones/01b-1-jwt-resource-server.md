@@ -1,5 +1,7 @@
 # Milestone 01B-1 — JWT resource-server security boundary
 
+> **Historical design note:** Original stage/status statements below describe the milestone at authoring time. For post-merge verification, local failures and fixes, and interview-ready evidence see [the engineering implementation ledger](../learning/iam-engineering-implementation-and-interview-ledger.md).
+
 **Status:** initial security configuration; **not** a complete authenticated IAM access-request API.
 
 ## Scope and rationale
