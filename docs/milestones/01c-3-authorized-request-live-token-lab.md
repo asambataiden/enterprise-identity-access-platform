@@ -1,0 +1,140 @@
+# Milestone 01C-3 — Real-token authorized access request and revocation
+
+**State:** implementation in PR; local signed-token positive and negative requests **not verified yet**. This is a synthetic lab-only exercise. Read [the learning ledger](../learning/iam-engineering-implementation-and-interview-ledger.md) for earlier stages.
+
+## Business problem / security requirement
+
+01C-2 proved a real Keycloak Authorization Code + PKCE login, token claim presence and HTTP 403 where there was no local permission. Now prove an **explicit local grant** allows precisely one tenant-bound actor to create a persisted PENDING request. Revoke the grant and verify the **same signed-token identity** is denied again. The system does **not** approve or provision entitlements.
+
+```mermaid
+sequenceDiagram
+  participant Operator
+  participant KC as Keycloak iam-lab
+  participant DB as IAM PostgreSQL localhost:55432
+  participant Browser as PKCE smoke client
+  participant API as Spring API localhost:8082
+  Operator->>KC: Resolve synthetic user ID via Admin API
+  KC-->>Operator: immutable user subject UUID
+  Operator->>DB: Seed tenant, actor, target, app, role and identity
+  Operator->>DB: Grant ACCESS_REQUEST_CREATE
+  Browser->>KC: Authorization Code + S256 PKCE
+  KC-->>Browser: Signed access token
+  Browser->>API: POST /api/v1/access-requests
+  API->>DB: Validate issuer/sub/tenant and local grant
+  API->>DB: Idempotent tenant-safe PENDING insert
+  API-->>Browser: 201 Created
+  Operator->>DB: Revoke local permission
+  Browser->>API: New token, same subject, new POST
+  API-->>Browser: 403 Forbidden
+```
+
+## Boundaries and implementation choices
+
+- **No production DB:** `seed-authorized-iam-fixture.py` first checks the exact Docker container's published PostgreSQL port is **127.0.0.1:55432**; SQL runs inside `keycloak-iam-lab-db-1` and only against `iamdb`.
+- The `IAM_LAB_TENANT_ID` is an operator-supplied synthetic UUID. Actor/employee/application IDs derive deterministically from UUIDv5; rerunning seeds the same entities.
+- **No magic JWT subject:** the fixture reads the actual Keycloak user's immutable ID using the lab Admin API. It does not use the username as the JWT `sub`.
+- **No hidden privilege escalation:** Keycloak users are not automatically given local IAM permissions. The explicit fixture grants only `ACCESS_REQUEST_CREATE` to one actor; `--revoke` deletes only that grant.
+- Tenant and identity mappings are checked by issuer and subject. The access-request application uses composite tenant-scoped DB foreign keys and a unique `(tenant_id, idempotency_key)` constraint.
+- The bootstrap admin password grant in the provisioning helper is **dev only**. Production requires a scoped Keycloak service account, TLS, a secret manager and audited grants.
+- No bearer tokens, admin passwords, test user passwords or OAuth codes may be printed, committed or pasted into the issue/PR.
+
+## Step-by-step runbook — Mac/Zsh
+
+**1. Switch to this branch.**
+
+```bash
+git fetch origin
+git switch --track origin/feat/iam-real-token-authorized-request-lab
+python3 -m py_compile ops/keycloak/seed-authorized-iam-fixture.py ops/keycloak/oidc-pkce-smoke.py
+```
+
+**2. Verify disposable lab services.** No need to recreate or remove anything. You already verified 01C-2 and can retain the same synthetic Keycloak user.
+
+```bash
+bash ops/keycloak/check-metadata.sh
+docker inspect --format '{{.State.Health.Status}}' keycloak-iam-lab-db-1
+curl -fsS http://127.0.0.1:8082/actuator/health
+```
+
+Expected: metadata two PASS lines, PostgreSQL `healthy`, API `UP`. If Java is not running, use the same authenticated shell where the isolated DB variables were exported and launch `mvn spring-boot:run -Dspring-boot.run.arguments=--server.port=8082`. Never point `DB_URL` to the Payment Platform on 5432.
+
+**3. Set local bootstrap secrets (environment, not Git).** Use the original terminal with the lab admin variables, or type them in a new shell without echoing the password:
+
+```zsh
+export IAM_LAB_TENANT_ID=8230545d-3560-41e6-af0b-b1ef50778606
+read -r "IAM_LAB_ADMIN_USERNAME?Lab admin username: "
+read -rs "IAM_LAB_ADMIN_PASSWORD?Lab admin password: "
+printf '\n'
+export IAM_LAB_ADMIN_USERNAME IAM_LAB_ADMIN_PASSWORD
+```
+
+**4. Seed only the synthetic authorization fixture** and record the generated non-secret IDs. This is intentionally a privilege-changing operation for this local test identity.
+
+```bash
+python3 ops/keycloak/seed-authorized-iam-fixture.py
+```
+
+Expected `PASS: ... grant present` and printed `LAB_TARGET_EMPLOYEE_ID`, `LAB_APPLICATION_ID` and `LAB_FOREIGN_EMPLOYEE_ID`. These are identifiers, **not credentials**.
+
+**5. Verify HTTP 201 and idempotency using a real browser PKCE login.** Replace the two placeholders with the exact fixture IDs printed above. A synthetic user password is entered **only in the browser**. Use a fresh test-only idempotency key.
+
+```bash
+python3 ops/keycloak/oidc-pkce-smoke.py \
+  --employee-id YOUR_LAB_TARGET_EMPLOYEE_ID \
+  --application-id YOUR_LAB_APPLICATION_ID \
+  --idempotency-key iam-lab-positive-01 \
+  --expect-status 201 \
+  --repeat-on-success
+```
+
+Expected only when verified live: signed-token flow succeeds, HTTP 201, `PENDING`, identical ID on retry. Script intentionally suppresses access tokens and raw response bodies.
+
+**6. Verify foreign-tenant target is not revealed.** With a *new* test-only idempotency key and the exact foreign employee ID generated in step 4:
+
+```bash
+python3 ops/keycloak/oidc-pkce-smoke.py \
+  --employee-id YOUR_LAB_FOREIGN_EMPLOYEE_ID \
+  --application-id YOUR_LAB_APPLICATION_ID \
+  --expect-status 404
+```
+
+Expected: generic HTTP 404; no cross-tenant request persisted.
+
+**7. Verify changed-terms retry conflict.** Reuse **the same key as step 5** but change the employee to a different valid tenant-local employee (the actor ID or another seeded local target). Do **not** use a foreign-tenant employee for this test; otherwise target validation returns 404 before the idempotency conflict check. This scenario is already checked in automated Java integration tests.
+
+**8. Revoke the grant and prove fail-closed behavior.**
+
+```bash
+python3 ops/keycloak/seed-authorized-iam-fixture.py --revoke
+
+python3 ops/keycloak/oidc-pkce-smoke.py \
+  --employee-id YOUR_LAB_TARGET_EMPLOYEE_ID \
+  --application-id YOUR_LAB_APPLICATION_ID \
+  --expect-status 403
+```
+
+This must be a **new** browser login token for this run. The Keycloak user remains enabled; only the local IAM permission is removed.
+
+## Test evidence
+
+- Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
+- Added JUnit/Testcontainers cases (mock JWT policy, **not** live signed tokens): revoked permission => 403, foreign-tenant target => 404, reused key with different terms => 409.
+- Real Keycloak 201/retry/404/revoke-403 evidence: **pending operator execution**, do not describe as verified until actual output reviewed.
+- Run `mvn -B --no-transfer-progress clean verify` and check GitHub CI before merge.
+- Test identity is fictional; do not use project/company real user identities or emails.
+
+## Cleanup / safe state
+
+The normal safe state is **permission revoked** after step 8. Retain container state only for local development. Stop the Java API with Ctrl-C. To remove *only* the disposable lab services at a later time, consult the 01C-2 guide and do not use `--remove-orphans` or `docker system prune`. Do not perform automatic SQL deletion of other fixtures without explicit verification of their origin.
+
+## Interview prompts
+
+**Why not give permissions based on the token scope alone?** Scope is a coarse OAuth capability. IAM-specific permission is owned and evaluated by the service against active tenant-local identities.
+
+**Why query the Keycloak user ID instead of matching username?** The `sub` claim identifies the stable IdP principal; usernames are mutable and may be reused.
+
+**Why deterministic UUIDv5 fixture IDs?** Re-running tests won't create new logical tenant employees/applications; the script checks live issuer/subject mapping and active records after writes.
+
+**Why does revoke result in 403 even with a valid token?** Authorization is re-evaluated server-side on each access-request operation. Existing JWT validity does not override a revoked local grant.
+
+**What remains before production?** Automated E2E in CI, no bootstrap admin password grant, production TLS and secret manager, audit of permission changes, proper approval/provisioning, negative key-rotation/replay tests, and database backup/retention discipline.
