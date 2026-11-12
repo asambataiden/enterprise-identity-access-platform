@@ -1,5 +1,7 @@
 package dev.asambataiden.iam.bootstrap;
 
+import jakarta.servlet.DispatcherType;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -18,6 +20,10 @@ public class BootstrapSecurityConfiguration {
         http.formLogin(form -> form.disable());
         http.oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
         http.authorizeHttpRequests(authorize -> authorize
+                // Boot handles controller errors through an ERROR dispatch to /error.
+                // Allow only this dispatcher type to preserve 404/409 responses;
+                // direct REQUEST dispatches remain subject to default-deny.
+                .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers("/actuator/health").permitAll()
                 .requestMatchers("/api/v1/access-requests/**").hasAuthority("SCOPE_access:request")
                 .anyRequest().denyAll());
