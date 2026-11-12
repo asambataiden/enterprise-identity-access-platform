@@ -125,6 +125,16 @@ python3 ops/keycloak/oidc-pkce-smoke.py \
 
 This must be a **new** browser login token for this run. The Keycloak user remains enabled; only the local IAM permission is removed.
 
+## Verified troubleshooting — first fixture attempt
+
+Operator observed Keycloak OIDC issuer/JWKS PASS, IAM PostgreSQL `healthy`, Java Actuator `UP`, but the initial fixture reported `FAIL: IAM-only fixture SQL failed`.
+
+**Cause identified in source:** fixture used `docker compose -f ops/keycloak/postgres.compose.yaml exec`, which reparses a Compose file with required `IAM_LAB_DB_PASSWORD` variable. A different shell may not have that variable even though the database container is already running. The script had suppressed stderr to avoid disclosing SQL/private information, so the first error was not specific. This diagnosis is supported by the Compose file's `:`-required environment expression and the invocation; **the user's precise stderr was not recorded**, so this is a code-level probable cause rather than an observed error classification.
+
+**Correction:** `psql` executes using `docker exec -i keycloak-iam-lab-db-1` **after** verifying that exact container's port is bound at `127.0.0.1:55432`. This avoids re-parsing Compose secrets while retaining the no-production-database guard. CI regression tests mock the invocations to assert the guard, command and redacted failure messages. A live fixture success remains pending.
+
+**Operator recovery:** from the existing feature branch, run `git pull --ff-only origin feat/iam-real-token-authorized-request-lab` and retry `python3 ops/keycloak/seed-authorized-iam-fixture.py` with your existing `IAM_LAB_TENANT_ID` and admin variables. Do **not** reset Keycloak or delete any PostgreSQL containers; the fixture is transactional and seeded IDs are deterministic. If the fix does not resolve the error, investigate read-only Postgres logs, correct database schema and container identity without exposing secrets.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
