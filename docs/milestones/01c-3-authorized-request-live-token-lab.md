@@ -157,6 +157,24 @@ python3 ops/keycloak/oidc-pkce-smoke.py \
 
 If token tenant mismatch: correct the synthetic Keycloak user's `tenant_id` via the idempotent local provisioner, never weaken server-side checks. If local exact join is false: validate issuer/subject and binding for the actual login user. If both true but API still 403: inspect non-sensitive API security logs and confirm the running Java process points to `127.0.0.1:55432/iamdb` and is running the current code; do **not** disable Spring Security or grant broader permissions. A live positive result is still **pending**.
 
+## Confirmed root cause — missing `sub` claim in access token
+
+Operator's diagnostic established: `tenant_id` is a string and parses successfully as a UUID, while **`sub` is absent** (`NoneType`). This explains why `RequestActorResolver` cannot match the Keycloak principal even though the fixture contains an identity/permission grant and all coarse issuer/audience/scope checks report true.
+
+**Fix:** explicitly include Keycloak's built-in `oidc-sub-mapper` with `access.token.claim=true` on `iam-lab-cli`. This mapper is defined in the version-controlled realm import and reconciled via the live local Admin API with `ops/keycloak/ensure-subject-mapper.py`. Keycloak's Admin API documents this mapper and setting; no custom unsafe `sub` claim or password grant for the application is needed. The script is idempotent, targets only the IAM local client, verifies readback, and does not destroy the realm or rotate user credentials. It uses the existing **lab-only bootstrap admin** environment. Never relax `RequestActorResolver` to bypass absent `sub`.
+
+```bash
+git pull --ff-only origin feat/iam-real-token-authorized-request-lab
+python3 ops/keycloak/ensure-subject-mapper.py
+python3 ops/keycloak/oidc-pkce-smoke.py \
+  --employee-id 3ee649c4-ff4e-5f57-96c7-d9885fbfff04 \
+  --application-id 0f072d55-aadd-51c5-a04d-1bff3315dec7 \
+  --idempotency-key iam-lab-positive-01 \
+  --expect-status 201 --repeat-on-success --diagnose-local-binding
+```
+
+The **new 201 result is not yet verified**; keep the PR open until observed. The Python decoder is informational only; Java validates the JWT signature/issuer/audience. If the mapper already exists and `sub` remains absent after a fresh token, inspect the client policies and applied client scopes before making additional changes.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
