@@ -74,7 +74,7 @@ export IAM_LAB_ADMIN_USERNAME IAM_LAB_ADMIN_PASSWORD
 python3 ops/keycloak/seed-authorized-iam-fixture.py
 ```
 
-Expected `PASS: ... grant present` and printed `LAB_TARGET_EMPLOYEE_ID`, `LAB_APPLICATION_ID` and `LAB_FOREIGN_EMPLOYEE_ID`. These are identifiers, **not credentials**.
+Expected `PASS: ... grant present` and printed `LAB_ACTOR_EMPLOYEE_ID`, `LAB_TARGET_EMPLOYEE_ID`, `LAB_APPLICATION_ID` and `LAB_FOREIGN_EMPLOYEE_ID`. These are identifiers, **not credentials**.
 
 **5. Verify HTTP 201 and idempotency using a real browser PKCE login.** Replace the two placeholders with the exact fixture IDs printed above. A synthetic user password is entered **only in the browser**. Use a fresh test-only idempotency key.
 
@@ -100,7 +100,17 @@ python3 ops/keycloak/oidc-pkce-smoke.py \
 
 Expected: generic HTTP 404; no cross-tenant request persisted.
 
-**7. Verify changed-terms retry conflict.** Reuse **the same key as step 5** but change the employee to a different valid tenant-local employee (the actor ID or another seeded local target). Do **not** use a foreign-tenant employee for this test; otherwise target validation returns 404 before the idempotency conflict check. This scenario is already checked in automated Java integration tests.
+**7. Verify changed-terms retry conflict (real token).** Reuse **the same key as step 5** but change the target employee to the actor's other *valid tenant-local* employee ID printed in step 4. This makes the request terms differ while all references remain valid. Do **not** use a foreign tenant employee here (that would return 404 first).
+
+```bash
+python3 ops/keycloak/oidc-pkce-smoke.py \\
+  --employee-id YOUR_LAB_ACTOR_EMPLOYEE_ID \\
+  --application-id YOUR_LAB_APPLICATION_ID \\
+  --idempotency-key iam-lab-positive-01 \\
+  --expect-status 409
+```
+
+Expected: HTTP 409, with the original PENDING record remaining unchanged.
 
 **8. Revoke the grant and prove fail-closed behavior.**
 
