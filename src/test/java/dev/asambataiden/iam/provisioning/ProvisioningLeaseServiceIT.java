@@ -33,11 +33,13 @@ class ProvisioningLeaseServiceIT {
 
     @Autowired JdbcTemplate jdbc;
     @Autowired ProvisioningLeaseService leases;
+    @Autowired ProvisioningAttemptJournal journal;
     @Autowired ApprovalDecisionService decisions;
     UUID tenant, requester, approver, subject, application, requestId;
 
     @BeforeEach
     void seed() {
+        jdbc.update("DELETE FROM provisioning_attempts");
         jdbc.update("DELETE FROM provisioning_work_items");
         jdbc.update("DELETE FROM access_decisions");
         jdbc.update("DELETE FROM access_requests");
@@ -73,6 +75,69 @@ class ProvisioningLeaseServiceIT {
 
     private void approve() {
         decisions.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED);
+    }
+
+    @Test
+    void journalRequiresApprovedCurrentLeaseAndIsReplaySafe() {
+        assertTrue(leases.claim(tenant, 30).isEmpty());
+        approve();
+        var lease = leases.claim(tenant, 30).orElseThrow();
+        assertTrue(journal.start(lease));
+        assertFalse(journal.start(lease));
+        assertEquals(1L, jdbc.queryForObject("""
+            SELECT count(*) FROM provisioning_attempts
+             WHERE tenant_id=? AND request_id=? AND attempt_number=1
+               AND outcome='STARTED' AND lease_token=?
+            """, Long.class, tenant, requestId, lease.token()));
+        assertFalse(journal.start(new ProvisioningLeaseService.Lease(
+                tenant, requestId, UUID.randomUUID(), 1)));
+    }
+
+    @Test
+    void journalUsesStableIdempotencyAcrossRecoveredLeases() {
+        approve();
+        var old = leases.claim(tenant, 30).orElseThrow();
+        assertTrue(journal.start(old));
+        String key = ProvisioningAttemptJournal.idempotencyKey(tenant, requestId);
+        assertEquals(key, jdbc.queryForObject("""
+            SELECT idempotency_key FROM provisioning_attempts
+            WHERE tenant_id=? AND request_id=? AND attempt_number=1
+            """, String.class, tenant, requestId));
+        jdbc.update("""
+            UPDATE provisioning_work_items
+               SET lease_expires_at=CURRENT_TIMESTAMP - interval '1 second'
+             WHERE tenant_id=? AND request_id=?
+            """, tenant, requestId);
+        var replacement = leases.claim(tenant, 30).orElseThrow();
+        assertFalse(journal.start(old));
+        assertTrue(journal.start(replacement));
+        assertEquals(key, jdbc.queryForObject("""
+            SELECT idempotency_key FROM provisioning_attempts
+            WHERE tenant_id=? AND request_id=? AND attempt_number=2
+            """, String.class, tenant, requestId));
+        assertNotEquals(old.token(), replacement.token());
+        assertEquals(2L, jdbc.queryForObject("""
+            SELECT count(*) FROM provisioning_attempts WHERE tenant_id=? AND request_id=?
+            """, Long.class, tenant, requestId));
+    }
+
+    @Test
+    void journalRejectsForgedAttemptAndWrongTenant() {
+        approve();
+        var lease = leases.claim(tenant, 30).orElseThrow();
+        assertFalse(journal.start(new ProvisioningLeaseService.Lease(
+                UUID.randomUUID(), requestId, lease.token(), lease.attempt())));
+        assertFalse(journal.start(new ProvisioningLeaseService.Lease(
+                tenant, requestId, lease.token(), 2)));
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> jdbc.update("""
+                    INSERT INTO provisioning_attempts
+                        (tenant_id,request_id,attempt_number,lease_token,idempotency_key)
+                    VALUES (?,?,?,?,?)
+                    """, UUID.randomUUID(), requestId, 1, UUID.randomUUID(), "forged"));
+        assertEquals(0L, jdbc.queryForObject("""
+            SELECT count(*) FROM provisioning_attempts WHERE tenant_id=? AND request_id=?
+            """, Long.class, tenant, requestId));
     }
 
     @Test

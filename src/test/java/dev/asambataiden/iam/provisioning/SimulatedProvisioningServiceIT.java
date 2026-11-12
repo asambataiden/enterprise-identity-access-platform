@@ -39,6 +39,7 @@ class SimulatedProvisioningServiceIT {
 
     @BeforeEach
     void seed() {
+        jdbc.update("DELETE FROM provisioning_attempts");
         jdbc.update("DELETE FROM provisioning_work_items");
         jdbc.update("DELETE FROM access_decisions");
         jdbc.update("DELETE FROM access_requests");
