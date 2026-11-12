@@ -42,13 +42,15 @@ def admin_token():
                    form={"grant_type":"password","client_id":"admin-cli",
                          "username":user,"password":pw})["access_token"]
 
-def provision_user(token, tenant, rotate):
+def provision_user(token, tenant, rotate, allow_create=True):
     root="/admin/realms/iam-lab/users"
     query=urllib.parse.urlencode({"username":USER,"exact":"true"})
     matches=[v for v in kc.call(root+"?"+query,token=token) if v.get("username")==USER]
     if len(matches)>1:
         raise RuntimeError("Duplicate synthetic approver account; refusing changes")
     created = not matches
+    if created and not allow_create:
+        raise RuntimeError("Synthetic approver account not present; refusing to create it during revoke")
     if created:
         kc.call(root, method="POST", token=token, payload={
             "username":USER, "enabled":True, "firstName":"IAM", "lastName":"Lab Approver",
@@ -85,17 +87,17 @@ def main():
     tenant=require_tenant(os.getenv("IAM_LAB_TENANT_ID"))
     if args.revoke and args.rotate_password:
         ap.error("Password rotation and revoke must be separate operations")
-    token=admin_token()
-    subject=provision_user(token,tenant,args.rotate_password)
     actor=uuid.uuid5(tenant,"iam-lab-test-approver:employee")
     original_actor=uuid.uuid5(tenant,"iam-lab-test-admin:employee")
     if actor == original_actor:
         raise RuntimeError("Approver and requester must not be the same employee")
-
-    # psql() validates both the container name AND the dedicated 127.0.0.1:55432 port.
+    # Validate the IAM-only DB and existing tenant before changing Keycloak.
+    # psql() validates container name AND 127.0.0.1:55432 binding.
     exists=fixture.psql(f"""SELECT count(*) FROM tenants WHERE id='{tenant}';""")
     if exists != "1":
-        raise RuntimeError("Synthetic tenant fixture missing; refusing to create arbitrary tenant")
+        raise RuntimeError("Synthetic tenant fixture missing; refusing to modify Keycloak")
+    token=admin_token()
+    subject=provision_user(token,tenant,args.rotate_password,allow_create=not args.revoke)
     mapping=fixture.psql(f"""SELECT count(*) FROM employee_identities
 WHERE tenant_id='{tenant}' AND issuer='{ISSUER}' AND subject='{subject}';""")
     if mapping not in ("0","1"):
