@@ -153,4 +153,101 @@ class MockProvisioningOrchestratorIT {
             SELECT state FROM provisioning_work_items WHERE tenant_id=? AND request_id=?
             """, String.class, tenant, requestId));
     }
+
+    @Test
+    void recoveredLeaseReadsExistingTargetEntitlementWithoutSecondPost() throws Exception {
+        approve();
+        var first = leases.claim(tenant, 30).orElseThrow();
+        assertTrue(journal.start(first));
+        // Simulate a crashed worker after the target wrote the entitlement
+        // but before the IAM database received readback evidence.
+        var server = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        var writes = new java.util.concurrent.atomic.AtomicInteger();
+        var stored = new java.util.concurrent.atomic.AtomicReference<String>();
+        server.createContext("/entitlements", exchange -> {
+            try (exchange) {
+                String path = exchange.getRequestURI().getPath();
+                if ("POST".equals(exchange.getRequestMethod()) && "/entitlements".equals(path)) {
+                    writes.incrementAndGet();
+                    stored.set(new String(exchange.getRequestBody().readAllBytes(),
+                            java.nio.charset.StandardCharsets.UTF_8));
+                    exchange.sendResponseHeaders(201, -1);
+                } else if ("GET".equals(exchange.getRequestMethod())
+                        && path.equals("/entitlements/" + tenant + "/" + requestId)
+                        && stored.get() != null) {
+                    byte[] bytes = stored.get().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                } else {
+                    exchange.sendResponseHeaders(404, -1);
+                }
+            }
+        });
+        server.start();
+        try {
+            var target = new LoopbackHttpProvisioningTargetAdapter(
+                    java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                    java.time.Duration.ofSeconds(2));
+            var identity = new ProvisioningTargetAdapter.Entitlement(
+                    tenant, requestId, subject, application, "READER");
+            assertEquals(ProvisioningTargetAdapter.ApplyResult.APPLIED,
+                    target.apply(identity, ProvisioningAttemptJournal.idempotencyKey(tenant, requestId)));
+            assertEquals(1, writes.get());
+            jdbc.update("""
+                UPDATE provisioning_work_items
+                   SET lease_expires_at=CURRENT_TIMESTAMP - interval '1 second'
+                 WHERE tenant_id=? AND request_id=?
+                """, tenant, requestId);
+            var replacement = leases.claim(tenant, 30).orElseThrow();
+            var orchestrator = new MockProvisioningOrchestrator(journal, observations, jdbc, target);
+            assertEquals(MockTargetObservationJournal.Outcome.VERIFIED,
+                    orchestrator.execute(replacement));
+            assertEquals(1, writes.get(), "Reconciliation must not repeat target POST");
+            assertEquals("VERIFIED", jdbc.queryForObject("""
+                SELECT outcome FROM provisioning_mock_observations
+                 WHERE tenant_id=? AND request_id=? AND attempt_number=2
+                """, String.class, tenant, requestId));
+            assertEquals("LEASED", jdbc.queryForObject("""
+                SELECT state FROM provisioning_work_items WHERE tenant_id=? AND request_id=?
+                """, String.class, tenant, requestId));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void initialReadbackErrorDoesNotIssueBlindWrite() throws Exception {
+        approve();
+        var lease = leases.claim(tenant, 30).orElseThrow();
+        var writes = new java.util.concurrent.atomic.AtomicInteger();
+        var server = com.sun.net.httpserver.HttpServer.create(
+                new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/entitlements", exchange -> {
+            try (exchange) {
+                if ("POST".equals(exchange.getRequestMethod())) {
+                    writes.incrementAndGet();
+                    exchange.sendResponseHeaders(201, -1);
+                } else {
+                    exchange.sendResponseHeaders(503, -1);
+                }
+            }
+        });
+        server.start();
+        try {
+            var target = new LoopbackHttpProvisioningTargetAdapter(
+                    java.net.URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                    java.time.Duration.ofSeconds(2));
+            var orchestrator = new MockProvisioningOrchestrator(journal, observations, jdbc, target);
+            assertEquals(MockTargetObservationJournal.Outcome.UNKNOWN,
+                    orchestrator.execute(lease));
+            assertEquals(0, writes.get(), "Uncertain readback must fail closed");
+            assertEquals("UNKNOWN", jdbc.queryForObject("""
+                SELECT outcome FROM provisioning_mock_observations
+                 WHERE tenant_id=? AND request_id=? AND attempt_number=1
+                """, String.class, tenant, requestId));
+        } finally {
+            server.stop(0);
+        }
+    }
 }
