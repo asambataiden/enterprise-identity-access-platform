@@ -21,8 +21,9 @@ jobs:
           python3 -m json.tool ops/keycloak/realm/iam-lab-realm.json >/dev/null
           bash -n ops/keycloak/check-metadata.sh
           python3 ops/keycloak/check-pkce-fixture.py
-          python3 -m py_compile ops/keycloak/oidc-pkce-smoke.py ops/keycloak/provision-synthetic-user.py ops/keycloak/seed-authorized-iam-fixture.py ops/keycloak/ensure-subject-mapper.py
+          python3 -m py_compile ops/keycloak/oidc-pkce-smoke.py ops/keycloak/provision-synthetic-user.py ops/keycloak/seed-authorized-iam-fixture.py ops/keycloak/ensure-subject-mapper.py ops/keycloak/ensure-decision-scope.py ops/keycloak/provision-synthetic-approver.py ops/keycloak/seed-approval-requests.py
           python3 ops/keycloak/test_seed_authorized_iam_fixture.py
+          python3 ops/keycloak/test_approval_lab_fixture.py
           docker compose -f ops/keycloak/compose.yaml config --quiet --no-interpolate
       - name: Verify Java baseline
         run: mvn -B --no-transfer-progress clean verify
