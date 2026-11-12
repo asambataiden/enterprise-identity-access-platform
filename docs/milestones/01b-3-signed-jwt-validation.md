@@ -1,5 +1,7 @@
 # Milestone 01B-3 — Cryptographic JWT trust validation
 
+> **Historical design note:** Original stage/status statements below describe the milestone at authoring time. For post-merge verification, local failures and fixes, and interview-ready evidence see [the engineering implementation ledger](../learning/iam-engineering-implementation-and-interview-ledger.md).
+
 **Status:** offline test-only hardening. No Keycloak container, accounts, passwords or issued production credentials.
 
 ## What is verified

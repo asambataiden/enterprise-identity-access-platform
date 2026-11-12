@@ -1,5 +1,7 @@
 # Milestone 01C-1 — Local Keycloak OIDC metadata lab
 
+> **Historical design note:** Original stage/status statements below describe the milestone at authoring time. For post-merge verification, local failures and fixes, and interview-ready evidence see [the engineering implementation ledger](../learning/iam-engineering-implementation-and-interview-ledger.md).
+
 **Status:** lab scaffolding committed; local container execution and token-based API verification require operator-run evidence. This milestone **does not** claim full Keycloak interoperability.
 
 ## What this establishes

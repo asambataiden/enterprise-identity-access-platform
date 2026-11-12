@@ -1,5 +1,7 @@
 # Milestone 01A — Tenant-scoped persistence and retry safety
 
+> **Historical design note:** Original stage/status statements below describe the milestone at authoring time. For post-merge verification, local failures and fixes, and interview-ready evidence see [the engineering implementation ledger](../learning/iam-engineering-implementation-and-interview-ledger.md).
+
 **Status:** implementation proposed in feature branch, pending green hosted Java CI.  
 **Scope:** internal service only. This is **not** a functional authenticated IAM API, access approval, entitlement grant or application provisioning system.
 

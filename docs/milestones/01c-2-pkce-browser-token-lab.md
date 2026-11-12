@@ -1,5 +1,7 @@
 # Milestone 01C-2 — Real Keycloak Authorization Code + PKCE (local lab)
 
+> **Historical design note:** Original stage/status statements below describe the milestone at authoring time. For post-merge verification, local failures and fixes, and interview-ready evidence see [the engineering implementation ledger](../learning/iam-engineering-implementation-and-interview-ledger.md).
+
 **Status:** implementation committed; operator-run browser login and API token validation **pending**. This is a synthetic local integration exercise, not production-ready authentication or completed IAM governance.
 
 ## Goal and constraints

@@ -1,5 +1,7 @@
 # Milestone 01B-2 — Authenticated access-request intake
 
+> **Historical design note:** Original stage/status statements below describe the milestone at authoring time. For post-merge verification, local failures and fixes, and interview-ready evidence see [the engineering implementation ledger](../learning/iam-engineering-implementation-and-interview-ledger.md).
+
 **Status:** feature branch, pending Java CI verification. This increment implements POST-only access request creation, **not** approval or entitlement provisioning.
 
 ## Trust flow
