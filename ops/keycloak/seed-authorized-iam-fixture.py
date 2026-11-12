@@ -122,6 +122,7 @@ WHERE tenant_id='{tenant}' AND employee_id='{actor}' AND permission_key='ACCESS_
     print("PASS: active Keycloak issuer+subject mapped to synthetic employee")
     print("PASS: ACCESS_REQUEST_CREATE grant " + ("revoked" if args.revoke else "present"))
     if not args.revoke:
+        print("LAB_ACTOR_EMPLOYEE_ID=" + str(actor))
         print("LAB_TARGET_EMPLOYEE_ID=" + str(target))
         print("LAB_APPLICATION_ID=" + str(application))
         print("LAB_FOREIGN_EMPLOYEE_ID=" + str(foreign_employee))
