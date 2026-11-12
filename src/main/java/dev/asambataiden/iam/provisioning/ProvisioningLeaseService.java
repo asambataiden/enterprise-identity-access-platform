@@ -37,6 +37,14 @@ public class ProvisioningLeaseService {
         if (tenantId == null || leaseSeconds < 5 || leaseSeconds > 300) {
             throw new IllegalArgumentException("Invalid tenant or lease duration");
         }
+        // A final-attempt crash cannot leave a permanently expired LEASED row.
+        jdbc.update("""
+            UPDATE provisioning_work_items
+               SET state='QUARANTINED', lease_token=NULL, lease_expires_at=NULL,
+                   last_error_code='UNKNOWN'
+             WHERE tenant_id=? AND state='LEASED' AND attempt_count >= ?
+               AND lease_expires_at <= CURRENT_TIMESTAMP
+            """, tenantId, MAX_ATTEMPTS);
         List<UUID> ids = jdbc.query("""
             SELECT request_id FROM provisioning_work_items
              WHERE tenant_id=?
