@@ -221,11 +221,25 @@ Reference: https://docs.spring.io/spring-security/reference/servlet/authorizatio
 
 **Remaining:** only the live **revoke local grant → HTTP 403** acceptance evidence. The fixture's `--revoke` option explicitly deletes only `ACCESS_REQUEST_CREATE` for the synthetic actor/tenant and verifies the grant is absent. Revoke is an intentional local lab state change, not a test to run against real tenants. Complete that check before merging.
 
+## Final operator acceptance — permission revocation and HTTP 403 (12 November 2026)
+
+**Observed in local IAM lab:** the synthetic IAM fixture command `python3 ops/keycloak/seed-authorized-iam-fixture.py --revoke` completed with:
+`PASS: active Keycloak issuer+subject mapped to synthetic employee`,
+`PASS: ACCESS_REQUEST_CREATE grant revoked`, and
+`No production tenants, users or application permissions touched.`
+The operator ran this command twice, with the same successful readback, demonstrating the revocation operation is repeatable in this lab.
+
+The first post-revocation smoke attempt obtained a Keycloak token but failed with `Connection refused`; this was an **API availability issue, not a security-policy result**, and is not counted as an acceptance pass. After the API health endpoint returned `{"groups":["liveness","readiness"],"status":"UP"}`, the operator repeated the test using synthetic target employee `3ee649c4-ff4e-5f57-96c7-d9885fbfff04`, application `0f072d55-aadd-51c5-a04d-1bff3315dec7` and a fresh key `iam-lab-after-revoke-01`. Authorization Code + S256 PKCE succeeded; issuer, audience, scope and tenant informational checks were true; HTTP response was **403** as expected. The helper reported `bearer insufficient_scope challenge: False` and `Authorization denied (verify intended grant state)`. The missing challenge is consistent with an application-level permission denial and is not, by itself, a trace of the exact Java method executed.
+
+**Final live acceptance:** HTTP **201** + `PENDING` + same-ID retry; cross-tenant **404**; changed-payload same-key **409**; revoke local permission then **403**. All were observed using fresh, real Keycloak PKCE login and the local IAM API. CI MockMvc/Testcontainers tests are independent supporting evidence rather than substitutes for the live tests.
+
+**Final fixture state:** local `ACCESS_REQUEST_CREATE` grant **revoked**; retain as least-privilege lab state. No lab teardown, token dumps, or permission restoration is required. This milestone does not imply production-ready IAM, entitlement provisioning or external security certification.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
 - Added JUnit/Testcontainers cases (mock JWT policy, **not** live signed tokens): revoked permission => 403, foreign-tenant target => 404, reused key with different terms => 409.
-- Real Keycloak HTTP 201 + PENDING + stable idempotency retry and cross-tenant HTTP 404: **verified by operator output** on 12 November 2026. Real-token changed-payload same-key HTTP 409: **verified**. Grant revocation → HTTP 403: **pending**.
+- Real Keycloak HTTP 201 + PENDING + stable idempotency retry and cross-tenant HTTP 404: **verified by operator output** on 12 November 2026. Real-token changed-payload same-key HTTP 409: **verified**. Grant revocation → HTTP 403: **verified by operator output, after API recovery**.
 - Run `mvn -B --no-transfer-progress clean verify` and check GitHub CI before merge.
 - Test identity is fictional; do not use project/company real user identities or emails.
 
