@@ -175,6 +175,20 @@ python3 ops/keycloak/oidc-pkce-smoke.py \
 
 The **new 201 result is not yet verified**; keep the PR open until observed. The Python decoder is informational only; Java validates the JWT signature/issuer/audience. If the mapper already exists and `sub` remains absent after a fresh token, inspect the client policies and applied client scopes before making additional changes.
 
+## Verified operator evidence — real Keycloak positive authorization
+
+**Observed locally, 12 November 2026, branch `feat/iam-real-token-authorized-request-lab`:**
+
+- `ensure-subject-mapper.py` reported `PASS: OIDC subject mapper installed on local PKCE client` and `PASS: access-token sub mapper verified; no users/passwords/other clients modified`.
+- Authorization Code + S256 PKCE successfully exchanged for an access token. Informational decoded issuer, audience, scope, and tenant claim checks were all true. **Python did not cryptographically validate the JWT**; Spring Resource Server handled signed JWT verification.
+- `tenant_id` and `sub` had string types; the tenant was a valid UUID, token tenant matched the fixture, and the exact issuer/subject/tenant employee had an active local grant.
+- Running the real API POST with synthetic target employee `3ee649c4-ff4e-5f57-96c7-d9885fbfff04`, application `0f072d55-aadd-51c5-a04d-1bff3315dec7` and idempotency key `iam-lab-positive-01` returned **HTTP 201**, `PASS: authorized request persisted as PENDING` and `PASS: equivalent retry preserved request ID`.
+- The token itself, password, bearer Authorization header, OAuth callback and confidential SQL details were **not displayed or saved**.
+
+**Boundary:** This validates authorized access-request intake and idempotent retry, not approval, entitlement provisioning, token rotation, distributed performance, or an automated live-Keycloak test in CI. Real-token cross-tenant 404, idempotency-conflict 409 and grant-revocation 403 still await local operator evidence.
+
+**Interview explanation:** Identity-provider JWT validity and presence of `access:request` scope are necessary but not sufficient. The API binds the signed principal's `iss/sub/tenant_id` to an active tenant-scoped employee with explicit permission. Because `sub` was absent, the system denied the earlier attempt; enabling the built-in subject mapper restored authorization without relaxing Java security checks. Database uniqueness preserves idempotency across retries.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
