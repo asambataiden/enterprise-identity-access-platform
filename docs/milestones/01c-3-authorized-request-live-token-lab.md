@@ -189,6 +189,14 @@ The **new 201 result is not yet verified**; keep the PR open until observed. The
 
 **Interview explanation:** Identity-provider JWT validity and presence of `access:request` scope are necessary but not sufficient. The API binds the signed principal's `iss/sub/tenant_id` to an active tenant-scoped employee with explicit permission. Because `sub` was absent, the system denied the earlier attempt; enabling the built-in subject mapper restored authorization without relaxing Java security checks. Database uniqueness preserves idempotency across retries.
 
+## Cross-tenant live-token diagnostic (not yet passed)
+
+**Observed:** previously, the same synthetic fixture gave real token HTTP 201 with PENDING persistence and same-ID retry. Two later real-token requests targeting foreign tenant employee `2166ca53-e6bf-55f2-8fc5-d2d869c768b2` returned **403**, not the expected 404. During the second run, helper reported tenant UUID matched, `sub` was a string, and the read-only query of IAM-only PostgreSQL found an active exact issuer/subject/tenant permission grant.
+
+**Interpretation:** the Java controller maps a target not found in the authenticated tenant to **404**, while the security filter can deny `SCOPE_access:request` with **403** and the `RequestActorResolver` can deny missing local actor with **403**. We cannot infer which layer denied based only on the code and Python's independent DB read; the Java runtime might have different DB state or configuration. An API 403 is not sufficient evidence that cross-tenant target validation was reached.
+
+**Next non-secret diagnostic:** the smoke script now prints only whether the `WWW-Authenticate` response header is a standard Bearer `insufficient_scope` challenge (True/False), without revealing the header's raw value, token or body. If true, investigate Spring Security authority conversion; if false, inspect server-side actor lookup and actual Java runtime datasource. Do not disable scope checks or add an application grant to make an expected status appear. Avoid repeated login attempts until this boundary is classified.
+
 ## Test evidence
 
 - Existing verified baseline: 6 unit + 13 PostgreSQL integration tests.
