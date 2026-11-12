@@ -39,7 +39,7 @@ def psql(sql):
     if len(bindings) != 1 or bindings[0].get("HostIp") != "127.0.0.1" or bindings[0].get("HostPort") != "55432":
         raise RuntimeError("Refusing SQL: expected IAM-only DB container on 127.0.0.1:55432")
     run = subprocess.run(["docker", "compose", "-f", str(DB_COMPOSE), "exec", "-T",
-                          "iam-lab-db", "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1",
+                          "iam-lab-db", "psql", "-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1",
                           "-U", "iam_app", "-d", "iamdb"],
                          input=sql, text=True, capture_output=True)
     if run.returncode:
