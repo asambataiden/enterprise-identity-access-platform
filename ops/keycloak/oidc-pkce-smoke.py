@@ -228,6 +228,12 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
             with urllib.request.urlopen(request, timeout=12) as response:
                 return response.status, json.load(response)
         except urllib.error.HTTPError as error:
+            # Classify a standard bearer error without logging headers or credentials.
+            challenge = error.headers.get("WWW-Authenticate", "")
+            if error.code == 403:
+                print("Diagnostic: bearer insufficient_scope challenge:",
+                      challenge.lower().startswith("bearer ") and
+                      "insufficient_scope" in challenge.lower())
             return error.code, None  # discard body to avoid leaking authorization details
 
     code, data = post_once()
