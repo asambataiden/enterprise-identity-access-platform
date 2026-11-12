@@ -7,8 +7,10 @@ Do not use outside the isolated iam-lab developer environment.
 import argparse
 import base64
 import hashlib
+import importlib.util
 import http.server
 import json
+from pathlib import Path
 import secrets
 import sys
 import time
@@ -48,6 +50,8 @@ def main():
     parser.add_argument("--idempotency-key", help="Stable test-only key to verify retries/conflicts")
     parser.add_argument("--expect-status", type=int, choices=[201, 403, 404, 409],
                         help="Fail if the real API status differs")
+    parser.add_argument("--diagnose-local-binding", action="store_true",
+                        help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
     parser.add_argument("--repeat-on-success", action="store_true",
                         help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
@@ -153,6 +157,40 @@ def main():
     print("  access:request scope present:", "access:request" in scopes)
     print("  tenant_id present:", bool(claims.get("tenant_id")))
     print("Access token intentionally not displayed or saved.")
+
+    if args.diagnose_local_binding:
+        # This is a controlled local diagnostic, not a production auth check.
+        # JWT claims are NOT signature-verified by Python. The Java API verifies JWTs.
+        fixture_path = Path(__file__).resolve().with_name("seed-authorized-iam-fixture.py")
+        spec = importlib.util.spec_from_file_location("iam_lab_fixture", fixture_path)
+        fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture)
+        expected_tenant = uuid.UUID("8230545d-3560-41e6-af0b-b1ef50778606")
+        try:
+            actual_tenant = uuid.UUID(str(claims.get("tenant_id", "")))
+            subject = uuid.UUID(str(claims.get("sub", "")))
+        except (ValueError, TypeError):
+            raise RuntimeError("Token tenant/subject is not a valid UUID") from None
+        issuer = claims.get("iss")
+        if issuer != ISSUER:
+            raise RuntimeError("Token issuer differs from local expected issuer")
+        print("Diagnostic: token tenant matches fixture:", actual_tenant == expected_tenant)
+        sql = ("""
+SELECT count(*)
+FROM employee_identities i
+JOIN employees e ON e.tenant_id=i.tenant_id AND e.id=i.employee_id
+JOIN employee_permissions p
+  ON p.tenant_id=e.tenant_id AND p.employee_id=e.id
+WHERE i.tenant_id='""" + str(actual_tenant) + """'
+  AND i.issuer='http://127.0.0.1:8281/realms/iam-lab'
+  AND i.subject='""" + str(subject) + """'
+  AND e.lifecycle_status='ACTIVE'
+  AND p.permission_key='ACCESS_REQUEST_CREATE';
+""")
+        matching = fixture.psql(sql).strip()
+        print("Diagnostic: exact token actor has local active grant:", matching == "1")
+        if matching != "1":
+            print("Diagnostic: no exact active grant for this login token in isolated IAM DB.")
 
     employee_id = args.employee_id or str(uuid.uuid4())
     application_id = args.application_id or str(uuid.uuid4())
