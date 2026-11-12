@@ -142,7 +142,7 @@ class QuarantineReviewJournalIT {
             QuarantineReviewJournal.Decision.HOLD,
             QuarantineReviewJournal.ReasonCode.POLICY_REVIEW)));
         jdbc.update("""
-            UPDATE employees SET lifecycle_status='INACTIVE'
+            UPDATE employees SET lifecycle_status='DISABLED'
             WHERE tenant_id=? AND id=?
             """, tenant, approver);
         assertFalse(reviews.record(early));
