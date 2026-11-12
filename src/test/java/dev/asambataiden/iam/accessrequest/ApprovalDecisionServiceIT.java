@@ -36,6 +36,7 @@ class ApprovalDecisionServiceIT {
 
     @BeforeEach
     void seed() {
+        jdbc.update("DELETE FROM provisioning_work_items");
         jdbc.update("DELETE FROM access_decisions");
         jdbc.update("DELETE FROM access_requests");
         jdbc.update("DELETE FROM employee_permissions");
@@ -229,6 +230,63 @@ class ApprovalDecisionServiceIT {
         assertEquals(1L, jdbc.queryForObject("""
             SELECT count(*) FROM approval_audit_events WHERE tenant_id=? AND request_id=?
             """, Long.class, tenant, requestId));
+    }
+
+    @Test
+    void approvedDecisionEnqueuesExactlyOneDurableReadyWorkItem() {
+        service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED);
+        assertEquals(1L, jdbc.queryForObject("""
+            SELECT count(*) FROM provisioning_work_items WHERE tenant_id=? AND request_id=?
+              AND approval_outcome='APPROVED' AND state='READY'
+            """, Long.class, tenant, requestId));
+        assertThrows(IllegalStateException.class,
+                () -> service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED));
+        assertEquals(1L, jdbc.queryForObject(
+                "SELECT count(*) FROM provisioning_work_items WHERE tenant_id=? AND request_id=?",
+                Long.class, tenant, requestId));
+    }
+
+    @Test
+    void rejectedDecisionAndDeniedDecisionNeverEnqueueWork() {
+        assertThrows(SecurityException.class,
+                () -> service.decide(tenant, requester, requestId, ApprovalDecisionService.Decision.APPROVED));
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM provisioning_work_items", Long.class));
+        service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.REJECTED);
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM provisioning_work_items", Long.class));
+    }
+
+    @Test
+    void workItemCannotBeForgedOrPrematurelyMarkedSuccessful() {
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> jdbc.update("""
+                    INSERT INTO provisioning_work_items (tenant_id, request_id)
+                    VALUES (?,?)
+                    """, tenant, requestId));
+        service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED);
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> jdbc.update("""
+                    UPDATE provisioning_work_items SET state='SUCCEEDED'
+                    WHERE tenant_id=? AND request_id=?
+                    """, tenant, requestId));
+        assertEquals("READY", jdbc.queryForObject("""
+            SELECT state FROM provisioning_work_items WHERE tenant_id=? AND request_id=?
+            """, String.class, tenant, requestId));
+    }
+
+    @Test
+    void auditFailureAlsoRollsBackProvisioningIntent() {
+        jdbc.update("""
+            INSERT INTO approval_audit_events
+                (tenant_id,request_id,requester_id,approver_id,outcome)
+            VALUES (?,?,?,?,'APPROVED')
+            """, tenant, requestId, requester, approver);
+        assertThrows(org.springframework.dao.DataAccessException.class,
+                () -> service.decide(tenant, approver, requestId, ApprovalDecisionService.Decision.APPROVED));
+        assertEquals("PENDING", status());
+        assertEquals(0, decisions());
+        assertEquals(0L, jdbc.queryForObject(
+                "SELECT count(*) FROM provisioning_work_items WHERE tenant_id=? AND request_id=?",
+                Long.class, tenant, requestId));
     }
 
     private boolean tryDecision(CountDownLatch gate, UUID actor, ApprovalDecisionService.Decision decision)
