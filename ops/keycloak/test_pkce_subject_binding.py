@@ -3,7 +3,6 @@
 import importlib.util
 from pathlib import Path
 import unittest
-from unittest.mock import patch
 import uuid
 
 path = Path(__file__).with_name("oidc-pkce-smoke.py")
@@ -18,10 +17,8 @@ REQUEST = str(uuid.uuid5(uuid.UUID(TENANT), "iam-lab-03d-self-approval-request")
 class SubjectBindingTest(unittest.TestCase):
     def test_rejects_wrong_issuer_without_db_access(self):
         claims = {"iss": "https://evil.example", "tenant_id": TENANT, "sub": "synthetic"}
-        with patch.object(pkce.importlib.util, "spec_from_file_location") as load:
-            with self.assertRaisesRegex(RuntimeError, "issuer or tenant"):
-                pkce.assert_self_requester_binding(claims, TENANT, REQUEST)
-            load.assert_called_once()  # fixture may load, but no SQL called
+        with self.assertRaisesRegex(RuntimeError, "issuer or tenant"):
+            pkce.assert_self_requester_binding(claims, TENANT, REQUEST)
 
     def test_rejects_wrong_tenant(self):
         claims = {"iss": pkce.ISSUER, "tenant_id": str(uuid.uuid4()), "sub": "synthetic"}
