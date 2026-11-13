@@ -98,13 +98,20 @@ def main():
                         help="Require exact synthetic requester subject, pending request and temporary DECIDE grant before POST")
     parser.add_argument("--diagnose-local-binding", action="store_true",
                         help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
-    parser.add_argument("--scope", choices=["access:request", "access:decide"], default="access:request",
+    parser.add_argument("--scope", choices=["access:request", "access:decide", "provisioning:review"], default="access:request",
                         help="Optional OAuth scope to request for the synthetic login")
+    parser.add_argument("--quarantine-list", action="store_true",
+                        help="Read-only authenticated quarantine GET; no decisions or provisioning")
     parser.add_argument("--decision-request-id", help="Synthetic PENDING access request UUID for approval")
     parser.add_argument("--decision", choices=["APPROVED", "REJECTED"], default="APPROVED")
     parser.add_argument("--repeat-on-success", action="store_true",
                         help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.quarantine_list:
+        if args.scope != "provisioning:review" or args.decision_request_id or args.employee_id or args.application_id or args.repeat_on_success:
+            parser.error("--quarantine-list requires provisioning:review and cannot combine with POST options")
+        if args.expect_status not in (200, 403):
+            parser.error("--quarantine-list requires --expect-status 200 or 403")
     if args.assert_self_requester and (not args.decision_request_id or args.expect_status != 403 or args.scope != "access:decide"):
         parser.error("--assert-self-requester requires a decision request, access:decide and --expect-status 403")
     if args.decision_request_id:
@@ -281,6 +288,9 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
     if args.decision_request_id:
         body = json.dumps({"decision": args.decision}).encode()
         target_url = args.api_url.rstrip("/") + "/" + args.decision_request_id + "/decision"
+    elif args.quarantine_list:
+        body = None
+        target_url = args.api_url.replace("/api/v1/access-requests", "/api/v1/provisioning/quarantine")
     else:
         body = json.dumps({"employeeId": employee_id, "applicationId": application_id,
                            "roleKey": "READER"}).encode()
@@ -291,7 +301,7 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
                "Idempotency-Key": key}
 
     def post_once():
-        request = urllib.request.Request(target_url, data=body, method="POST", headers=headers)
+        request = urllib.request.Request(target_url, data=body, method="GET" if args.quarantine_list else "POST", headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
                 return response.status, json.load(response)
@@ -310,7 +320,12 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
         raise RuntimeError("Resource server rejected authentication; inspect issuer/JWKS/audience")
     if args.expect_status is not None and code != args.expect_status:
         raise RuntimeError(f"Expected HTTP {args.expect_status} but observed HTTP {code}")
-    if code == 200 and args.decision_request_id:
+    if code == 200 and args.quarantine_list:
+        if not isinstance(data, list) or any(not isinstance(row, dict) or
+                row.get("state") != "QUARANTINED" for row in data):
+            raise RuntimeError("Quarantine response contained unexpected data")
+        print("PASS: authenticated read-only quarantine list returned; records:", len(data))
+    elif code == 200 and args.decision_request_id:
         if not isinstance(data, dict) or data.get("decision") != args.decision or data.get("requestId") != args.decision_request_id:
             raise RuntimeError("Decision response did not match synthetic request/outcome")
         print("PASS: authenticated approval decision persisted (no provisioning verified here)")
