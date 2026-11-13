@@ -18,6 +18,10 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Validate immutable GitHub Actions supply-chain pins
+        run: |
+          python3 -m unittest discover -s ops/security -p 'test_*.py'
+          python3 ops/security/verify_github_actions_pins.py
       - name: Validate local Keycloak lab assets
         run: |
           python3 -m json.tool ops/keycloak/realm/iam-lab-realm.json >/dev/null
