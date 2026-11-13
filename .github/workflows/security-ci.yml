@@ -25,11 +25,10 @@ jobs:
           GITLEAKS_ENABLE_COMMENTS: 'false'
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
 
-  dependency-review:
-    name: Dependency review
-    if: github.event_name == 'pull_request'
+  dependency-vulnerabilities:
+    name: Dependency vulnerabilities (Trivy)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -37,7 +36,22 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Reject newly introduced high or critical vulnerabilities
-        uses: actions/dependency-review-action@v5
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
         with:
-          fail-on-severity: high
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build dependency-bearing Spring Boot JAR (without rerunning tests)
+        run: mvn -B --no-transfer-progress -DskipTests package
+      - name: Reject high and critical dependency vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: 'false'
+          format: table
+          exit-code: '1'
+          cache: 'true'
