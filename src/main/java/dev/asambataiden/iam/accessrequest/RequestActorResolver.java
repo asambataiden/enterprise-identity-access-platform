@@ -21,19 +21,30 @@ public class RequestActorResolver {
     }
 
     public Actor resolve(Jwt jwt) {
-        String issuer = jwt.getIssuer() == null ? null : jwt.getIssuer().toString();
+        if (jwt == null) {
+            throw forbidden();
+        }
+        var issuerUri = jwt.getIssuer();
         String subject = jwt.getSubject();
-        String tenantClaim = jwt.getClaimAsString("tenant_id");
+        if (issuerUri == null || subject == null || subject.isBlank()) {
+            throw forbidden();
+        }
+        String issuer = issuerUri.toString();
+        String tenantClaim;
+        try {
+            tenantClaim = jwt.getClaimAsString("tenant_id");
+        } catch (RuntimeException invalidClaim) {
+            throw forbidden();
+        }
+        if (tenantClaim == null || tenantClaim.isBlank()) {
+            throw forbidden();
+        }
         UUID tenantId;
         try {
             tenantId = UUID.fromString(tenantClaim);
-        } catch (RuntimeException ex) {
+        } catch (IllegalArgumentException invalidTenant) {
             throw forbidden();
         }
-        if (issuer == null || subject == null || subject.isBlank()) {
-            throw forbidden();
-        }
-
         var actors = jdbc.query("""
             SELECT e.id FROM employees e
             JOIN employee_identities identity
