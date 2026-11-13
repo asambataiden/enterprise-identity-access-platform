@@ -25,6 +25,10 @@ public class BootstrapSecurityConfiguration {
                 // direct REQUEST dispatches remain subject to default-deny.
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET,
+                        "/api/v1/provisioning/quarantine",
+                        "/api/v1/provisioning/quarantine/{requestId}")
+                    .hasAuthority("SCOPE_provisioning:review")
                 // Specific decision endpoint must be tested before the broader request route.
                 .requestMatchers(org.springframework.http.HttpMethod.POST,
                         "/api/v1/access-requests/{requestId}/decision")
