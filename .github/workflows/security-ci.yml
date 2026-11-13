@@ -55,3 +55,23 @@ jobs:
           format: table
           exit-code: '1'
           cache: 'true'
+
+  java-sast:
+    name: Java static analysis (SpotBugs + Find Security Bugs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compile and enforce SAST
+        run: mvn -B --no-transfer-progress -DskipTests package spotbugs:check
