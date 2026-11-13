@@ -63,7 +63,7 @@ python3 ops/security/verify_spotbugs_coverage.py \
 ## Security use cases
 - **SAST-COV-01:** New Java dependency cannot be located: CI rejects analysis coverage regression despite `spotbugs:check` reporting no bugs.
 - **SAST-COV-02:** Known synthetic method warning persists: CI makes the gap visible but allows baseline while being investigated.
-- **SAST-COV-03:** Scanner silently generates an XML report without a class summary or a project JAR entry: CI rejects rather than accepting an apparent clean scan.
+- **SAST-COV-03:** Scanner generates missing/malformed XML or no compiled class files: CI rejects. A minimal valid `BugCollection` XML report lacking class-summary/project-JAR metadata is permitted with analyzer completion, successful check, compiled input, and no newly unresolved references; this does **not** establish complete analysis coverage.
 - **SAST-COV-04:** Broken or missing XML result: CI rejects rather than relying on a happy-path Maven exit.
 - **SAST-COV-05:** An engineer removes a known warning: CI reports it in `resolved_since_baseline`; remove that entry only after checking it is genuinely resolved.
 
