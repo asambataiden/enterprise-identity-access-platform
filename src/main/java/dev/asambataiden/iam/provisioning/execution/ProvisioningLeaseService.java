@@ -75,6 +75,9 @@ public class ProvisioningLeaseService {
             SELECT attempt_count FROM provisioning_work_items
              WHERE tenant_id=? AND request_id=?
             """, Integer.class, tenantId, requestId);
+        if (attempts == null || attempts < 1 || attempts > MAX_ATTEMPTS) {
+            throw new IllegalStateException("Invalid attempt count for claimed work item");
+        }
         return Optional.of(new Lease(tenantId, requestId, token, attempts));
     }
 
