@@ -49,3 +49,21 @@ Then repeat the read-only SQL check in `03d-self-approval-real-token-lab.md` to 
 ## Architectural learning
 
 The trust layers are independent: Keycloak authenticates the user; PKCE protects the authorization code; the Java resource server validates token signature, issuer and audience; `DecisionActorResolver` binds the authenticated `(iss,sub,tenant_id)` to an active local employee; and `ApprovalDecisionService` enforces permission and no-self-approval. The Python helper's local SQL assertion is only a test-precondition witness. No provisioning or entitlement activation is part of this exercise.
+
+## Operator-observed identity-bound SoD acceptance — 2026-11-13
+
+**Result:** The live signed-token self-approval test **passed the identity, HTTP-denial and independent PostgreSQL persistence/cleanup checks**.
+
+The operator synchronized `main` to PR #26's merge commit `30ce5ffedc1304dbc5547334f9ff626d593037a1`, then ran the guarded test. The terminal output confirms:
+
+1. The canonical requester was temporarily granted `ACCESS_REQUEST_DECIDE` by `self-approval-guard.py --grant`.
+2. Real Keycloak authorization-code + S256 PKCE returned an access token with the expected issuer, API audience, `access:decide` scope and tenant claim.
+3. `--assert-self-requester` passed its **read-only IAM database check**, showing the token's `(iss,sub,tenant)` mapped to the active employee who requested the PENDING SELF fixture and currently held DECIDE.
+4. The authenticated API returned **HTTP 403** to that requester's attempted approval.
+5. The shell EXIT trap revoked the temporary DECIDE grant and the operator independently ran a second `--revoke` with successful readback. The separate approver's permissions were not modified by this exercise.
+
+**Why this is meaningful:** The denial cannot be attributed merely to absence of a local DECIDE grant, because the pre-POST assertion verified it was present. Unlike the earlier run, the subject was also checked against the exact requester identity before the POST. The Python helper only decodes claims for diagnostics; the Java resource server is responsible for cryptographic token verification.
+
+**Final acceptance gate — PASSED:** The operator subsequently performed independent, read-only SQL against `keycloak-iam-lab-db-1` and confirmed the SELF request `feaa03df-c097-5f13-80c4-5b934ac255d5` remained `PENDING`, with `decision_rows=0`, `audit_rows=0`, and `requester_decide_grants=0`. These results, together with the previously verified browser principal binding and API HTTP 403, satisfy the **specific real-token self-approval denial acceptance requirement**. Other IAM threats and production security controls remain outside this acceptance scope.
+
+No production target call, provisioning or entitlement activation was performed.
