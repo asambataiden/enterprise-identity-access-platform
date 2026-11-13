@@ -23,6 +23,11 @@
       "tag_ref": "https://github.com/aquasecurity/trivy-action/tree/v0.36.0",
       "tag_type": "annotated",
       "tag_object_sha": "a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8"
+    },
+    "actions/upload-artifact": {
+      "version": "v4",
+      "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02",
+      "tag_ref": "https://github.com/actions/upload-artifact/tree/v4"
     }
   }
 }
