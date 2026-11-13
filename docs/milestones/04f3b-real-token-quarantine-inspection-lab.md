@@ -74,3 +74,20 @@ An HTTP 403 despite a `provisioning:review` token scope demonstrates live local-
 An empty GET list is sufficient to prove **authorized access to the collection endpoint**, not the correctness of returning a specific quarantined work item. A separate, disposable and fully audited quarantine-state fixture is needed to prove **nonempty response details**, explicit cross-tenant isolation with two real identities, and GET idempotence under concurrency. No production target reconciliation, remediation, review-write API or entitlement provisioning is authorized here.
 
 The reviewer UUID and permission grant must not be supplied by the caller as authoritative HTTP headers. The server resolves the identity from the signed token and PostgreSQL authorization table on every call.
+
+## Operator-observed real-token acceptance — 2026-11-13
+
+The operator provided terminal results from the isolated IAM lab (Keycloak PKCE public client, Java API on 127.0.0.1:8082, IAM-only PostgreSQL at 127.0.0.1:55432, schema V11). This section records **observed output**, not independent replay or production certification.
+
+| Scenario | Observed evidence | Result |
+|---|---|---|
+| Reviewer identity fixture | Read-only SQL resolved deterministic `iam-lab-test-quarantine-reviewer:employee` employee `b21464d6-e522-50fa-8e40-cae8f0853247` as `ACTIVE` with 0 review grants before testing | PASS |
+| Temporary grant | Dedicated reviewer provisioner confirmed `PROVISIONING_QUARANTINE_REVIEW` present; unrelated requester CREATE remained revoked | PASS |
+| OIDC PKCE and authorization | Helper completed Keycloak Authorization Code + S256 PKCE; decoded issuer/audience/scope/tenant diagnostics were positive; API GET returned HTTP 200 and an empty JSON array of quarantined records | PASS (collection authorization) |
+| Automatic cleanup | EXIT-trap revoke confirmed dedicated reviewer permission absent | PASS |
+| Revoked reviewer | A subsequent browser PKCE exchange with `provisioning:review` produced HTTP 403, without bearer `insufficient_scope` challenge | PASS (revocation behavior) |
+| Additional cleanup | A second explicit `--revoke` again confirmed the permission absent | PASS |
+
+**Trust and evidence boundary:** The Python helper decoded the JWT for diagnostics without independently verifying its signature; the Spring resource server is responsible for cryptographic JWT validation. This run did **not** use the identity-bound assertion previously added for the 03D self-approval fixture, so the browser principal was not explicitly proven to be the intended reviewer by the helper. In a positive result, the server's active-employee permission lookup is consistent with that principal having a valid tenant-local grant, but the operator should not claim an explicit subject-to-reviewer precondition was independently checked.
+
+**Further required acceptance:** Add a dedicated requester/reviewer subject assertion, verify a nonempty quarantined fixture and detail GET response, exercise real signed tokens from a second tenant, and check before/after work-item/attempt/review counts for unchanged database evidence. The existing 04F-3A PostgreSQL MockMvc tests cover these boundaries at integration-test level, not as real-token acceptance. No review-writing, requeue, retry or production target calls were involved in this acceptance.
