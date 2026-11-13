@@ -36,7 +36,7 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(outcome["resolved_since_baseline"], ["toString"])
 
     def test_report_with_zero_classes_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "No analyzed classes"):
+        with self.assertRaisesRegex(ValueError, "zero analyzed classes"):
             evaluate(LOG, XML.replace('total_classes="28"', 'total_classes="0"'), [], 28)
 
     def test_report_without_summary_uses_project_jars(self):
