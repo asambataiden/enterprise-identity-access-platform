@@ -73,5 +73,17 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Verify SpotBugs coverage parser
+        run: python3 -m unittest discover -s ops/security -p 'test_*.py'
       - name: Compile and enforce SAST
-        run: mvn -B --no-transfer-progress -DskipTests package spotbugs:check
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn -B --no-transfer-progress -DskipTests package spotbugs:check 2>&1 | tee "$RUNNER_TEMP/spotbugs.log"
+      - name: Reject newly missing SpotBugs analysis references
+        run: |
+          python3 ops/security/verify_spotbugs_coverage.py \
+            --log "$RUNNER_TEMP/spotbugs.log" \
+            --xml target/spotbugs.xml \
+            --classes target/classes \
+            --baseline config/spotbugs-missing-baseline.json

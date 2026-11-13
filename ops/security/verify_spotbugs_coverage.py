@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Fail closed if SpotBugs coverage warnings grow beyond a reviewed baseline.
+
+Only the existing warning inventory is accepted. This does not make the
+unresolved references harmless; it prevents silent regression while the
+underlying bytecode/auxiliary-classpath issue is investigated.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+BANNER = "The following classes needed for analysis were missing:"
+# Strip GitHub Actions timestamp prefixes and ANSI codes (if present).
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\S+\s+")
+NAME = re.compile(r"^[A-Za-z_$][\w$]*(?:[./][A-Za-z_$][\w$]*)*$")
+
+
+def normalized(line: str) -> str:
+    return TIMESTAMP.sub("", ANSI.sub("", line)).strip()
+
+
+def missing_names(log: str) -> set[str]:
+    """Extract names printed in SpotBugs' 'classes needed' warning section."""
+    found: set[str] = set()
+    in_section = False
+    for line in log.splitlines():
+        entry = normalized(line)
+        if entry == BANNER:
+            in_section = True
+            continue
+        if in_section:
+            if entry and NAME.fullmatch(entry):
+                found.add(entry)
+                continue
+            in_section = False
+    return found
+
+
+def evaluate(log: str, xml: str, baseline: list[str], compiled_class_count: int) -> dict:
+    if "Done SpotBugs Analysis" not in log:
+        raise ValueError("SpotBugs completion marker not found in the Maven log")
+    if "No errors/warnings found" not in log:
+        raise ValueError("SpotBugs check success marker not found")
+    if compiled_class_count < 1:
+        raise ValueError("No compiled application classes were supplied")
+    root = ET.fromstring(xml)
+    if root.tag != "BugCollection":
+        raise ValueError(f"Unexpected SpotBugs report root: {root.tag}")
+    # Some releases emit minimal XML without summary or project metadata.
+    # A compiled class count checks INPUT presence, never analyzer completeness.
+    summary = root.find("FindBugsSummary")
+    analyzed = None
+    if summary is not None and "total_classes" in summary.attrib:
+        analyzed = int(summary.attrib["total_classes"])
+        if analyzed < 1:
+            raise ValueError("SpotBugs reports zero analyzed classes")
+    actual = missing_names(log)
+    for element in root.findall(".//MissingClass"):
+        name = (element.text or "").strip()
+        if name:
+            actual.add(name)
+    allowed = set(baseline)
+    newly_missing = sorted(actual - allowed)
+    return {
+        "compiled_classes": compiled_class_count,
+        "analyzed_classes_reported": analyzed,
+        "xml_root": root.tag,
+        "known_missing": sorted(actual & allowed),
+        "new_missing": newly_missing,
+        "resolved_since_baseline": sorted(allowed - actual),
+        "status": "fail" if newly_missing else "pass_with_known_warnings" if actual else "pass_clean",
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--log", type=Path, required=True)
+    parser.add_argument("--xml", type=Path, required=True)
+    parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--classes", type=Path, required=True)
+    args = parser.parse_args()
+    try:
+        baseline = json.loads(args.baseline.read_text(encoding="utf-8"))["allowed_missing"]
+        if not isinstance(baseline, list) or not all(isinstance(x, str) for x in baseline):
+            raise ValueError("Baseline allowed_missing must be a list of strings")
+        result = evaluate(
+            args.log.read_text(encoding="utf-8"),
+            args.xml.read_text(encoding="utf-8"),
+            baseline,
+            sum(1 for _ in args.classes.rglob("*.class")) if args.classes.is_dir() else 0,
+        )
+    except (OSError, ET.ParseError, ValueError, TypeError, KeyError) as exc:
+        print(f"SpotBugs coverage verification failed: {exc}", file=sys.stderr)
+        return 2
+
+    print(json.dumps(result, indent=2, sort_keys=True))
+    if result["new_missing"]:
+        print("NEW unresolved SpotBugs references; investigate classpath/bytecode support.", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
