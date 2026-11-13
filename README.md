@@ -1,6 +1,6 @@
 # Enterprise Identity & Access Management Platform
 
-**Status: Milestone 04G-3 (in development) — authenticated access governance, approval audit, controlled provisioning simulation, durable outbox, lease-fenced test relay and transactional inbox.**
+**Status: Milestone 04G-4 (in development) — tenant-scoped access governance, approval audit, controlled provisioning simulation, transactional outbox (V12), lease-fenced relay (V13), idempotent inbox (V14), and in-process end-to-end integration tests. No broker, scheduler, or real entitlement provisioning.**
 
 A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governance: access requests, approval controls, tenant isolation, account lifecycle orchestration, evidence and safe provisioning integrations. **No real identities or applications are provisioned in this baseline.**
 
@@ -9,7 +9,7 @@ A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governa
 - **Single deployable, modular monolith initially.** Domain-oriented packages, API ↔ application ↔ domain ↔ integration boundaries. Do not split into services prematurely.
 - **Keycloak is the identity provider**, introduced in a later milestone. The platform will *not* implement its own credential verification, authorization server, or cryptographic token issuance.
 - **Authorization is resource-aware.** Verified JWT authentication and coarse scopes are necessary but not sufficient. A tenant and resource decision, actor/requester separation, and approval constraints are part of UC-001.
-- **PostgreSQL + Flyway:** V1 tenant/application/role/access-request schema, with composite foreign keys and unique tenant-scoped idempotency keys. No external provisioning or approval is implemented.
+- **PostgreSQL + Flyway:** V1–V14 cover tenant isolation, requests, approvals, audit, safe simulation, outbox leasing and idempotent inbox processing. No real external entitlements are provisioned.
 - **Security fails closed:** only the local Actuator health endpoint is anonymous; all other requests are denied. This is a bootstrap boundary, not production hardening.
 
 ## Architecture
@@ -39,7 +39,7 @@ mvn spring-boot:run
 curl -fsS http://127.0.0.1:8080/actuator/health
 ```
 
-Only `/actuator/health` is intentionally available anonymously. There are **no IAM business endpoints yet**; an internal persistence service must not be exposed before authenticated Keycloak identity and resource authorization are implemented. An application run requires a local PostgreSQL URL and credentials; the test suite provisions disposable PostgreSQL.
+Only `/actuator/health` is intentionally available anonymously. Business endpoints require verified identity and resource authorization; the in-process publisher is **test-only** and exposes no listener. An application run requires a local PostgreSQL URL and credentials; integration tests use disposable PostgreSQL.
 
 ## Documentation map
 
