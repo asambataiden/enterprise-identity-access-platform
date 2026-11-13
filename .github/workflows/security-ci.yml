@@ -73,6 +73,8 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Verify immutable GitHub Actions supply-chain pins
+        run: python3 ops/security/verify_github_actions_pins.py
       - name: Verify SpotBugs coverage parser
         run: python3 -m unittest discover -s ops/security -p 'test_*.py'
       - name: Compile and enforce SAST
