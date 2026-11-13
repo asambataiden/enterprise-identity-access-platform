@@ -184,12 +184,12 @@ class QuarantineInspectionHttpIT {
             m.perform(get("/api/v1/provisioning/quarantine/{requestId}", requestId)
                     .with(jwt().jwt(b -> b.issuer(ISSUER).subject("quarantine-reviewer")
                                     .claim("tenant_id", invalid))
-                            .authorities(new SimpleGrantedAuthority("SCOPE_provisioning:review")))
+                            .authorities(new SimpleGrantedAuthority("SCOPE_provisioning:review"))))
                     .andExpect(status().isForbidden());
         }
         m.perform(get("/api/v1/provisioning/quarantine/{requestId}", requestId)
                 .with(jwt().jwt(b -> b.issuer(ISSUER).subject("quarantine-reviewer"))
-                        .authorities(new SimpleGrantedAuthority("SCOPE_provisioning:review")))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_provisioning:review"))))
                 .andExpect(status().isForbidden());
         assertEquals("QUARANTINED", jdbc.queryForObject(
                 "SELECT state FROM provisioning_work_items WHERE tenant_id=? AND request_id=?",
