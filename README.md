@@ -1,6 +1,6 @@
 # Enterprise Identity & Access Management Platform
 
-**Status: Milestone 01A (in development) — internal persistence only, not a functional IAM API.**
+**Status: Milestone 04G-3 (in development) — authenticated access governance, approval audit, controlled provisioning simulation, durable outbox, lease-fenced test relay and transactional inbox.**
 
 A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governance: access requests, approval controls, tenant isolation, account lifecycle orchestration, evidence and safe provisioning integrations. **No real identities or applications are provisioned in this baseline.**
 
