@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source": "GitHub Actions SpotBugs job for PR #42, 2026-11-13; see docs/milestones/05b1-spotbugs-analysis-coverage.md",
+  "allowed_missing": [
+    "apply",
+    "customize",
+    "equals",
+    "get",
+    "hashCode",
+    "makeConcatWithConstants",
+    "mapRow",
+    "test",
+    "toString"
+  ]
+}
