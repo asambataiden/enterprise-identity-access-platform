@@ -1,5 +1,6 @@
 package dev.asambataiden.iam.security;
 
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -28,24 +29,24 @@ import static org.mockito.Mockito.when;
 class ActorResolverInvalidClaimsTest {
 
     @Test
-    void requestActorRejectsMalformedIdentityWithoutDatabaseAccess() {
+    void requestActorRejectsMalformedIdentityWithoutDatabaseAccess() throws MalformedURLException {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         runNegativeIdentityCases(new RequestActorResolver(jdbc)::resolve, jdbc);
     }
 
     @Test
-    void decisionActorRejectsMalformedIdentityWithoutDatabaseAccess() {
+    void decisionActorRejectsMalformedIdentityWithoutDatabaseAccess() throws MalformedURLException {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         runNegativeIdentityCases(new DecisionActorResolver(jdbc)::resolve, jdbc);
     }
 
     @Test
-    void quarantineReviewerRejectsMalformedIdentityWithoutDatabaseAccess() {
+    void quarantineReviewerRejectsMalformedIdentityWithoutDatabaseAccess() throws MalformedURLException {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         runNegativeIdentityCases(new QuarantineReviewActorResolver(jdbc)::resolve, jdbc);
     }
 
-    private static void runNegativeIdentityCases(Consumer<Jwt> resolve, JdbcTemplate jdbc) {
+    private static void runNegativeIdentityCases(Consumer<Jwt> resolve, JdbcTemplate jdbc) throws MalformedURLException {
         List<Jwt> cases = List.of(
                 jwt(null, "employee", UUID.randomUUID().toString()),
                 jwt(URI.create("https://issuer.example.invalid/iam"), null, UUID.randomUUID().toString()),
@@ -63,9 +64,9 @@ class ActorResolverInvalidClaimsTest {
         verifyNoInteractions(jdbc);
     }
 
-    private static Jwt jwt(URI issuer, String subject, String tenantId) {
+    private static Jwt jwt(URI issuer, String subject, String tenantId) throws MalformedURLException {
         Jwt token = mock(Jwt.class);
-        when(token.getIssuer()).thenReturn(issuer);
+        when(token.getIssuer()).thenReturn(issuer == null ? null : issuer.toURL());
         when(token.getSubject()).thenReturn(subject);
         when(token.getClaimAsString("tenant_id")).thenReturn(tenantId);
         return token;
