@@ -1,4 +1,4 @@
-package dev.asambataiden.iam.provisioning;
+package dev.asambataiden.iam.provisioning.outbox;
 
 import java.util.Objects;
 

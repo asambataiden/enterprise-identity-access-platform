@@ -1,4 +1,4 @@
-package dev.asambataiden.iam.provisioning;
+package dev.asambataiden.iam.provisioning.inbox;
 
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;

@@ -1,4 +1,4 @@
-package dev.asambataiden.iam.provisioning;
+package dev.asambataiden.iam.provisioning.outbox;
 
 /** A publisher must be idempotency-aware: delivery can be attempted repeatedly. */
 @FunctionalInterface

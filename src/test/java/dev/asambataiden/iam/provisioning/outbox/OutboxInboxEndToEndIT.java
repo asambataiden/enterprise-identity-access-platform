@@ -1,5 +1,6 @@
-package dev.asambataiden.iam.provisioning;
+package dev.asambataiden.iam.provisioning.outbox;
 
+import dev.asambataiden.iam.provisioning.inbox.ProvisioningInboxConsumer;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 

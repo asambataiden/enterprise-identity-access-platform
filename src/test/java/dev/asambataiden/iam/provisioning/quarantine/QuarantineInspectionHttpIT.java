@@ -1,5 +1,6 @@
-package dev.asambataiden.iam.provisioning;
+package dev.asambataiden.iam.provisioning.quarantine;
 
+import dev.asambataiden.iam.provisioning.execution.ProvisioningLeaseService;
 import java.util.UUID;
 
 import dev.asambataiden.iam.accessrequest.ApprovalDecisionService;

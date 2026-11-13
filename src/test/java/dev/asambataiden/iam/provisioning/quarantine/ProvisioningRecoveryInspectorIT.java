@@ -1,5 +1,7 @@
-package dev.asambataiden.iam.provisioning;
+package dev.asambataiden.iam.provisioning.quarantine;
 
+import dev.asambataiden.iam.provisioning.execution.ProvisioningLeaseService;
+import dev.asambataiden.iam.provisioning.execution.ProvisioningAttemptJournal;
 import java.util.UUID;
 import java.util.concurrent.*;
 
@@ -19,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Testcontainers
-class MockTargetObservationJournalIT {
+class ProvisioningRecoveryInspectorIT {
     @Container
     static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17-alpine")
             .withDatabaseName("iamdb").withUsername("iam_app").withPassword("test-only-password");
@@ -34,7 +36,7 @@ class MockTargetObservationJournalIT {
     @Autowired JdbcTemplate jdbc;
     @Autowired ProvisioningLeaseService leases;
     @Autowired ProvisioningAttemptJournal journal;
-    @Autowired MockTargetObservationJournal observations;
+    @Autowired ProvisioningRecoveryInspector inspector;
     @Autowired ApprovalDecisionService decisions;
     UUID tenant, requester, approver, subject, application, requestId;
 
@@ -80,44 +82,44 @@ class MockTargetObservationJournalIT {
     }
 
     @Test
-    void mockObservationRequiresCommittedAttemptAndNeverSetsSucceeded() {
+    void quarantineInspectionReportsTenantScopedFactsWithoutMutatingWork() {
         approve();
-        var lease = leases.claim(tenant, 30).orElseThrow();
-        assertFalse(observations.record(lease, MockTargetObservationJournal.Outcome.VERIFIED));
-        assertTrue(journal.start(lease));
-        assertTrue(observations.record(lease, MockTargetObservationJournal.Outcome.VERIFIED));
-        assertFalse(observations.record(lease, MockTargetObservationJournal.Outcome.VERIFIED));
-        assertEquals("LEASED", jdbc.queryForObject("""
-            SELECT state FROM provisioning_work_items WHERE tenant_id=? AND request_id=?
-            """, String.class, tenant, requestId));
-        assertEquals("VERIFIED", jdbc.queryForObject("""
-            SELECT outcome FROM provisioning_mock_observations
-             WHERE tenant_id=? AND request_id=? AND attempt_number=1
-            """, String.class, tenant, requestId));
-        assertThrows(IllegalStateException.class, () ->
-                observations.record(lease, MockTargetObservationJournal.Outcome.ABSENT));
+        var first = leases.claim(tenant, 30).orElseThrow();
+        assertTrue(journal.start(first));
+        assertTrue(leases.fail(first, ProvisioningLeaseService.FailureCode.TIMEOUT, 1));
+        for (int attempt=2; attempt<=3; attempt++) {
+            jdbc.update("""
+                UPDATE provisioning_work_items SET next_attempt_at=CURRENT_TIMESTAMP - interval '1 second'
+                WHERE tenant_id=? AND request_id=?
+                """, tenant, requestId);
+            var next = leases.claim(tenant,30).orElseThrow();
+            assertTrue(leases.fail(next, ProvisioningLeaseService.FailureCode.UNKNOWN, 1));
+        }
+        var snapshot = inspector.inspect(tenant, requestId).orElseThrow();
+        assertEquals("QUARANTINED", snapshot.state());
+        assertEquals(3, snapshot.attempts());
+        assertEquals("UNKNOWN", snapshot.lastErrorCode());
+        assertEquals(1, snapshot.startedAttempts());
+        assertEquals(0, snapshot.mockVerified());
+        assertEquals(0, snapshot.mockAbsent());
+        assertEquals(0, snapshot.mockUnknown());
+        assertNull(snapshot.leaseExpiresAt());
+        assertEquals(1, inspector.quarantined(tenant, 10).size());
+        assertEquals(requestId, inspector.quarantined(tenant, 10).getFirst().requestId());
+        assertTrue(inspector.inspect(UUID.randomUUID(), requestId).isEmpty());
+        assertTrue(inspector.quarantined(UUID.randomUUID(), 10).isEmpty());
+        assertEquals("QUARANTINED", inspector.inspect(tenant, requestId).orElseThrow().state());
+        assertTrue(leases.claim(tenant,30).isEmpty());
     }
 
     @Test
-    void staleLeaseAndDifferentTenantCannotForgeMockVerification() {
-        approve();
-        var stale = leases.claim(tenant, 30).orElseThrow();
-        assertTrue(journal.start(stale));
-        assertFalse(observations.record(new ProvisioningLeaseService.Lease(
-                UUID.randomUUID(), requestId, stale.token(), stale.attempt()),
-                MockTargetObservationJournal.Outcome.VERIFIED));
-        jdbc.update("""
-            UPDATE provisioning_work_items SET lease_expires_at=CURRENT_TIMESTAMP - interval '1 second'
-             WHERE tenant_id=? AND request_id=?
-            """, tenant, requestId);
-        assertFalse(observations.record(stale, MockTargetObservationJournal.Outcome.VERIFIED));
-        var replacement = leases.claim(tenant, 30).orElseThrow();
-        assertFalse(observations.record(stale, MockTargetObservationJournal.Outcome.VERIFIED));
-        assertTrue(journal.start(replacement));
-        assertTrue(observations.record(replacement, MockTargetObservationJournal.Outcome.UNKNOWN));
-        assertEquals(1L, jdbc.queryForObject("""
-            SELECT count(*) FROM provisioning_mock_observations
-             WHERE tenant_id=? AND request_id=?
-            """, Long.class, tenant, requestId));
+    void inspectionValidatesTenantAndBoundedLimitAndShowsNoUnapprovedWork() {
+        assertTrue(inspector.inspect(tenant, requestId).isEmpty());
+        assertTrue(inspector.quarantined(tenant, 100).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> inspector.inspect(null, requestId));
+        assertThrows(IllegalArgumentException.class, () -> inspector.inspect(tenant, null));
+        assertThrows(IllegalArgumentException.class, () -> inspector.quarantined(null, 1));
+        assertThrows(IllegalArgumentException.class, () -> inspector.quarantined(tenant, 0));
+        assertThrows(IllegalArgumentException.class, () -> inspector.quarantined(tenant, 101));
     }
 }
