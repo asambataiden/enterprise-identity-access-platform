@@ -51,11 +51,21 @@ def evaluate(log: str, xml: str, baseline: list[str]) -> dict:
     if root.tag != "BugCollection":
         raise ValueError(f"Unexpected SpotBugs report root: {root.tag}")
     summary = root.find("FindBugsSummary")
-    if summary is None:
-        raise ValueError("SpotBugs report is missing FindBugsSummary")
-    analyzed = int(summary.attrib.get("total_classes", "0"))
-    if analyzed < 1:
-        raise ValueError("No analyzed classes in SpotBugs report")
+    # The plugin can emit the minimal XML format without FindBugsSummary.
+    # Project/Jar entries identify bytecode artifacts supplied to the analyzer.
+    # They are an input-coverage signal, NOT a count of classes analyzed.
+    project_jars = [
+        (node.text or "").strip()
+        for node in root.findall("./Project/Jar")
+        if (node.text or "").strip()
+    ]
+    analyzed = None
+    if summary is not None:
+        analyzed = int(summary.attrib.get("total_classes", "0"))
+        if analyzed < 1:
+            raise ValueError("No analyzed classes in SpotBugs report")
+    elif not project_jars:
+        raise ValueError("SpotBugs report lacks both class summary and analyzed-project Jar entries")
     actual = missing_names(log)
     # Some versions also include fully qualified missing classes in the XML.
     for element in root.findall(".//MissingClass"):
@@ -66,6 +76,8 @@ def evaluate(log: str, xml: str, baseline: list[str]) -> dict:
     newly_missing = sorted(actual - allowed)
     return {
         "analyzed_classes": analyzed,
+        "project_jar_count": len(project_jars),
+        "report_evidence": "class_summary" if analyzed is not None else "project_jars",
         "known_missing": sorted(actual & allowed),
         "new_missing": newly_missing,
         "resolved_since_baseline": sorted(allowed - actual),
