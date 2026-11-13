@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Milestone 05A-2: narrow reviewed findings. Reevaluate on code or auth-model changes.
+     See docs/milestones/05a2-java-sast.md. -->
+<FindBugsFilter>
+  <Match>
+    <Class name="dev.asambataiden.iam.accessrequest.AccessRequestService"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.accessrequest.ApprovalDecisionService"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.accessrequest.DecisionActorResolver"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.accessrequest.RequestActorResolver"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.execution.MockProvisioningOrchestrator"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.execution.ProvisioningAttemptJournal"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.execution.ProvisioningLeaseService"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.execution.SimulatedProvisioningService"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.inbox.ProvisioningInboxConsumer"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.outbox.OutboxDeliveryService"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.quarantine.ProvisioningRecoveryInspector"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.quarantine.QuarantineReviewActorResolver"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.quarantine.QuarantineReviewJournal"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.target.MockTargetObservationJournal"/>
+    <Field name="jdbc"/>
+    <Bug pattern="EI_EXPOSE_REP2"/>
+  </Match>
+  <!-- Only the existing bearer-token-only, stateless security chain. -->
+  <Match>
+    <Class name="dev.asambataiden.iam.bootstrap.BootstrapSecurityConfiguration"/>
+    <Bug pattern="SPRING_CSRF_PROTECTION_DISABLED"/>
+  </Match>
+  <!-- Known Spring-injected null validation; revisit if class gains finalizer/subclasses. -->
+  <Match>
+    <Class name="dev.asambataiden.iam.provisioning.inbox.ProvisioningInboxConsumer"/>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
+</FindBugsFilter>

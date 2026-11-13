@@ -18,14 +18,28 @@ public class DecisionActorResolver {
     }
 
     public RequestActorResolver.Actor resolve(Jwt jwt) {
-        if (jwt == null || jwt.getIssuer() == null || jwt.getSubject() == null
-                || jwt.getSubject().isBlank()) {
+        if (jwt == null) {
+            throw forbidden();
+        }
+        var issuerUri = jwt.getIssuer();
+        String subject = jwt.getSubject();
+        if (issuerUri == null || subject == null || subject.isBlank()) {
+            throw forbidden();
+        }
+        String issuer = issuerUri.toString();
+        String tenantClaim;
+        try {
+            tenantClaim = jwt.getClaimAsString("tenant_id");
+        } catch (RuntimeException invalidClaim) {
+            throw forbidden();
+        }
+        if (tenantClaim == null || tenantClaim.isBlank()) {
             throw forbidden();
         }
         UUID tenant;
         try {
-            tenant = UUID.fromString(jwt.getClaimAsString("tenant_id"));
-        } catch (RuntimeException invalidTenant) {
+            tenant = UUID.fromString(tenantClaim);
+        } catch (IllegalArgumentException invalidTenant) {
             throw forbidden();
         }
         var actors = jdbc.query("""
@@ -36,7 +50,7 @@ public class DecisionActorResolver {
                AND e.lifecycle_status='ACTIVE'
                AND p.permission_key='ACCESS_REQUEST_DECIDE'
             """, (rs, row) -> rs.getObject(1, UUID.class),
-                tenant, jwt.getIssuer().toString(), jwt.getSubject());
+                tenant, issuer, subject);
         if (actors.size() != 1) {
             throw forbidden();
         }

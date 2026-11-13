@@ -20,14 +20,28 @@ public class QuarantineReviewActorResolver {
     }
 
     public Actor resolve(Jwt jwt) {
-        if (jwt == null || jwt.getIssuer() == null || jwt.getSubject() == null ||
-                jwt.getSubject().isBlank()) {
+        if (jwt == null) {
+            throw forbidden();
+        }
+        var issuerUri = jwt.getIssuer();
+        String subject = jwt.getSubject();
+        if (issuerUri == null || subject == null || subject.isBlank()) {
+            throw forbidden();
+        }
+        String issuer = issuerUri.toString();
+        String tenantClaim;
+        try {
+            tenantClaim = jwt.getClaimAsString("tenant_id");
+        } catch (RuntimeException invalidClaim) {
+            throw forbidden();
+        }
+        if (tenantClaim == null || tenantClaim.isBlank()) {
             throw forbidden();
         }
         UUID tenantId;
         try {
-            tenantId = UUID.fromString(jwt.getClaimAsString("tenant_id"));
-        } catch (RuntimeException invalidClaim) {
+            tenantId = UUID.fromString(tenantClaim);
+        } catch (IllegalArgumentException invalidTenant) {
             throw forbidden();
         }
         var ids = jdbc.query("""
@@ -39,7 +53,7 @@ public class QuarantineReviewActorResolver {
                AND e.lifecycle_status='ACTIVE'
                AND p.permission_key='PROVISIONING_QUARANTINE_REVIEW'
             """, (rs, row) -> rs.getObject(1, UUID.class),
-                tenantId, jwt.getIssuer().toString(), jwt.getSubject());
+                tenantId, issuer, subject);
         if (ids.size() != 1) {
             throw forbidden();
         }
