@@ -49,4 +49,3 @@
   CREATE TRIGGER trg_enqueue_provisioning_outbox_event
     AFTER INSERT ON provisioning_work_items
     FOR EACH ROW EXECUTE FUNCTION iam_enqueue_provisioning_outbox_event();
-                                                                                
