@@ -183,6 +183,27 @@ class ApprovalDecisionHttpIT {
     }
 
     @Test
+    void malformedTenantClaimsCannotApproveOrWriteAuditEvidence() throws Exception {
+        var m = mvc();
+        for (String claim : new String[]{"", "invalid-uuid"}) {
+            m.perform(post("/api/v1/access-requests/{id}/decision", request)
+                    .with(jwt().jwt(b -> b.issuer(ISSUER).subject("approver")
+                            .claim("tenant_id", claim))
+                            .authorities(new SimpleGrantedAuthority("SCOPE_access:decide")))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"decision\":\"APPROVED\"}"))
+                    .andExpect(status().isForbidden());
+        }
+        m.perform(post("/api/v1/access-requests/{id}/decision", request)
+                .with(jwt().jwt(b -> b.issuer(ISSUER).subject("approver"))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_access:decide")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"APPROVED\"}"))
+                .andExpect(status().isForbidden());
+        unchanged();
+    }
+
+    @Test
     void unsupportedOrMissingDecisionCannotChangeRequest() throws Exception {
         mvc().perform(post("/api/v1/access-requests/{id}/decision",request)
                 .with(principal(tenant,"approver","access:decide"))

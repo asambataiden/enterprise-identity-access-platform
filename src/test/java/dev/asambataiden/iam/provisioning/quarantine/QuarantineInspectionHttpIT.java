@@ -177,6 +177,28 @@ class QuarantineInspectionHttpIT {
     }
 
     @Test
+    void invalidReviewerTenantClaimsNeverExposeQuarantineDetails() throws Exception {
+        quarantine();
+        var m = mvc();
+        for (String invalid : new String[]{"", "bad-tenant-id"}) {
+            m.perform(get("/api/v1/provisioning/quarantine/{requestId}", requestId)
+                    .with(jwt().jwt(b -> b.issuer(ISSUER).subject("quarantine-reviewer")
+                                    .claim("tenant_id", invalid))
+                            .authorities(new SimpleGrantedAuthority("SCOPE_provisioning:review"))))
+                    .andExpect(status().isForbidden());
+        }
+        m.perform(get("/api/v1/provisioning/quarantine/{requestId}", requestId)
+                .with(jwt().jwt(b -> b.issuer(ISSUER).subject("quarantine-reviewer"))
+                        .authorities(new SimpleGrantedAuthority("SCOPE_provisioning:review"))))
+                .andExpect(status().isForbidden());
+        assertEquals("QUARANTINED", jdbc.queryForObject(
+                "SELECT state FROM provisioning_work_items WHERE tenant_id=? AND request_id=?",
+                String.class, tenant, requestId));
+        assertEquals(0L, jdbc.queryForObject(
+                "SELECT count(*) FROM provisioning_quarantine_reviews", Long.class));
+    }
+
+    @Test
     void disabledReviewerAndUnquarantinedRequestAreNotDisclosed() throws Exception {
         var m = mvc();
         m.perform(get("/api/v1/provisioning/quarantine/{requestId}", requestId)
