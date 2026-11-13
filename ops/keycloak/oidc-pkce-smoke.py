@@ -42,6 +42,47 @@ def opaque_claims(token):
     return json.loads(base64.urlsafe_b64decode(payload))
 
 
+def assert_self_requester_binding(claims, expected_tenant, decision_request_id):
+    """Read-only guarded lab checks; decoded JWT alone is NOT trusted as a signature."""
+    fixture_path = Path(__file__).resolve().with_name("seed-authorized-iam-fixture.py")
+    spec = importlib.util.spec_from_file_location("iam_self_binding_fixture", fixture_path)
+    fixture = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixture)
+    if not expected_tenant:
+        raise RuntimeError("Set IAM_LAB_TENANT_ID for requester identity assertion")
+    try:
+        tenant = uuid.UUID(expected_tenant)
+        asserted_tenant = uuid.UUID(claims.get("tenant_id", ""))
+        request = uuid.UUID(decision_request_id)
+    except (ValueError, TypeError, AttributeError):
+        raise RuntimeError("Invalid synthetic tenant, token tenant or request identifier") from None
+    if tenant != uuid.UUID("8230545d-3560-41e6-af0b-b1ef50778606"):
+        raise RuntimeError("Refusing self-approval assertion outside canonical synthetic tenant")
+    if asserted_tenant != tenant or claims.get("iss") != ISSUER:
+        raise RuntimeError("Keycloak issuer or tenant does not match synthetic requester fixture")
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject or len(subject) > 255:
+        raise RuntimeError("Invalid opaque Keycloak subject")
+    # Never log the subject or decode bearer-token payload into operator output.
+    escaped_subject = subject.replace("'", "''")
+    actor = uuid.uuid5(tenant, "iam-lab-test-admin:employee")
+    expected_request = uuid.uuid5(tenant, "iam-lab-03d-self-approval-request")
+    if request != expected_request:
+        raise RuntimeError("Unexpected self-approval request identifier")
+    sql = f"""SELECT count(*) FROM employee_identities i
+JOIN employees e ON e.tenant_id=i.tenant_id AND e.id=i.employee_id
+JOIN access_requests ar ON ar.tenant_id=e.tenant_id AND ar.requester_id=e.id
+JOIN employee_permissions p ON p.tenant_id=e.tenant_id AND p.employee_id=e.id
+WHERE i.tenant_id='{tenant}' AND i.employee_id='{actor}'
+AND i.issuer='{ISSUER}' AND i.subject='{escaped_subject}'
+AND e.lifecycle_status='ACTIVE'
+AND ar.id='{request}' AND ar.status='PENDING'
+AND p.permission_key='ACCESS_REQUEST_DECIDE';"""
+    if fixture.psql(sql).strip() != "1":
+        raise RuntimeError("Browser principal is not the authorized synthetic requester; no decision submitted")
+    print("PASS: token subject maps to the requester's active tenant employee with DECIDE grant (diagnostic DB readback)")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-url", default="http://127.0.0.1:8082/api/v1/access-requests",
@@ -53,6 +94,8 @@ def main():
                         help="Fail if the real API status differs")
     parser.add_argument("--expected-tenant-id", default=os.getenv("IAM_LAB_TENANT_ID"),
                         help="Synthetic fixture tenant UUID (required for local binding diagnosis)")
+    parser.add_argument("--assert-self-requester", action="store_true",
+                        help="Require exact synthetic requester subject, pending request and temporary DECIDE grant before POST")
     parser.add_argument("--diagnose-local-binding", action="store_true",
                         help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
     parser.add_argument("--scope", choices=["access:request", "access:decide"], default="access:request",
@@ -62,6 +105,8 @@ def main():
     parser.add_argument("--repeat-on-success", action="store_true",
                         help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.assert_self_requester and (not args.decision_request_id or args.expect_status != 403 or args.scope != "access:decide"):
+        parser.error("--assert-self-requester requires a decision request, access:decide and --expect-status 403")
     if args.decision_request_id:
         try:
             uuid.UUID(args.decision_request_id)
@@ -175,6 +220,9 @@ def main():
     print("  requested scope present:", args.scope in scopes)
     print("  tenant_id present:", bool(claims.get("tenant_id")))
     print("Access token intentionally not displayed or saved.")
+
+    if args.assert_self_requester:
+        assert_self_requester_binding(claims, args.expected_tenant_id, args.decision_request_id)
 
     if args.diagnose_local_binding:
         # This is a controlled local diagnostic, not a production auth check.
