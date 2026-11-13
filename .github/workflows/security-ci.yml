@@ -85,4 +85,5 @@ jobs:
           python3 ops/security/verify_spotbugs_coverage.py \
             --log "$RUNNER_TEMP/spotbugs.log" \
             --xml target/spotbugs.xml \
+            --classes target/classes \
             --baseline config/spotbugs-missing-baseline.json
