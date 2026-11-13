@@ -19,44 +19,44 @@ The following classes needed for analysis were missing:
 
 class CoverageTest(unittest.TestCase):
     def test_existing_warnings_are_visible_but_accepted(self):
-        outcome = evaluate(LOG, XML, ["toString", "makeConcatWithConstants"])
+        outcome = evaluate(LOG, XML, ["toString", "makeConcatWithConstants"], 28)
         self.assertEqual(outcome["status"], "pass_with_known_warnings")
-        self.assertEqual(outcome["analyzed_classes"], 28)
+        self.assertEqual(outcome["analyzed_classes_reported"], 28)
         self.assertFalse(outcome["new_missing"])
 
     def test_new_unresolved_reference_is_a_regression(self):
-        outcome = evaluate(LOG.replace("  toString", "  unknownTarget"), XML, ["toString", "makeConcatWithConstants"])
+        outcome = evaluate(LOG.replace("  toString", "  unknownTarget"), XML, ["toString", "makeConcatWithConstants"], 28)
         self.assertEqual(outcome["new_missing"], ["unknownTarget"])
         self.assertEqual(outcome["status"], "fail")
 
     def test_fully_resolved_report_is_clean(self):
         log = "[INFO] Done SpotBugs Analysis....\n[INFO] No errors/warnings found"
-        outcome = evaluate(log, XML, ["toString"])
+        outcome = evaluate(log, XML, ["toString"], 28)
         self.assertEqual(outcome["status"], "pass_clean")
         self.assertEqual(outcome["resolved_since_baseline"], ["toString"])
 
     def test_report_with_zero_classes_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "No analyzed classes"):
-            evaluate(LOG, XML.replace('total_classes="28"', 'total_classes="0"'), [])
+            evaluate(LOG, XML.replace('total_classes="28"', 'total_classes="0"'), [], 28)
 
     def test_report_without_summary_uses_project_jars(self):
         xml = '<BugCollection><Project><Jar>target/classes</Jar></Project></BugCollection>'
-        outcome = evaluate(LOG, xml, ["toString", "makeConcatWithConstants"])
-        self.assertIsNone(outcome["analyzed_classes"])
-        self.assertEqual(outcome["project_jar_count"], 1)
-        self.assertEqual(outcome["report_evidence"], "project_jars")
+        outcome = evaluate(LOG, xml, ["toString", "makeConcatWithConstants"], 28)
+        self.assertIsNone(outcome["analyzed_classes_reported"])
+        self.assertEqual(outcome["compiled_classes"], 28)
+        self.assertEqual(outcome["xml_root"], "BugCollection")
 
-    def test_report_without_summary_or_jars_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "lacks both class summary"):
-            evaluate(LOG, "<BugCollection/>", [])
+    def test_empty_compiled_input_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "No compiled application classes"):
+            evaluate(LOG, "<BugCollection/>", [], 0)
 
     def test_missing_completion_marker_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "completion marker"):
-            evaluate("No errors/warnings found", XML, [])
+            evaluate("No errors/warnings found", XML, [], 28)
 
     def test_xml_missing_class_is_detected(self):
         report = XML.replace("</BugCollection>", "<Errors><MissingClass>some.example.Foo</MissingClass></Errors></BugCollection>")
-        outcome = evaluate(LOG, report, ["toString", "makeConcatWithConstants"])
+        outcome = evaluate(LOG, report, ["toString", "makeConcatWithConstants"], 28)
         self.assertIn("some.example.Foo", outcome["new_missing"])
 
     def test_timestamped_log_lines_are_parsed(self):
