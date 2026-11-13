@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Manage a SECOND synthetic reviewer for the disposable localhost IAM lab only.
+"""Manage a DEDICATED synthetic reviewer for the disposable localhost IAM lab only.
 
 Default provisions the synthetic Keycloak user + its local employee binding,
 without granting permission. --grant / --revoke operate exclusively on the
@@ -94,8 +94,6 @@ def main():
     old_approver=uuid.uuid5(tenant,"iam-lab-test-approver:employee")
     if actor in (original_actor, old_approver):
         raise RuntimeError("Reviewer must be distinct from requester and approver")
-    if actor == original_actor:
-        raise RuntimeError("Reviewer and requester must not be the same employee")
     # Validate the IAM-only DB and existing tenant before changing Keycloak.
     # psql() validates container name AND 127.0.0.1:55432 binding.
     exists=fixture.psql(f"""SELECT count(*) FROM tenants WHERE id='{tenant}';""")
