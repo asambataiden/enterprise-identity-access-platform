@@ -4,6 +4,7 @@ from verify_spotbugs_coverage import evaluate, missing_names
 
 XML = """<?xml version="1.0"?>
 <BugCollection version="4.10.5">
+  <Project><Jar>target/classes</Jar></Project>
   <FindBugsSummary total_classes="28" total_size="900" />
 </BugCollection>
 """
@@ -38,8 +39,15 @@ class CoverageTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No analyzed classes"):
             evaluate(LOG, XML.replace('total_classes="28"', 'total_classes="0"'), [])
 
-    def test_report_without_summary_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "missing FindBugsSummary"):
+    def test_report_without_summary_uses_project_jars(self):
+        xml = '<BugCollection><Project><Jar>target/classes</Jar></Project></BugCollection>'
+        outcome = evaluate(LOG, xml, ["toString", "makeConcatWithConstants"])
+        self.assertIsNone(outcome["analyzed_classes"])
+        self.assertEqual(outcome["project_jar_count"], 1)
+        self.assertEqual(outcome["report_evidence"], "project_jars")
+
+    def test_report_without_summary_or_jars_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "lacks both class summary"):
             evaluate(LOG, "<BugCollection/>", [])
 
     def test_missing_completion_marker_is_rejected(self):
