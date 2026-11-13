@@ -42,32 +42,25 @@ def missing_names(log: str) -> set[str]:
     return found
 
 
-def evaluate(log: str, xml: str, baseline: list[str]) -> dict:
+def evaluate(log: str, xml: str, baseline: list[str], compiled_class_count: int) -> dict:
     if "Done SpotBugs Analysis" not in log:
         raise ValueError("SpotBugs completion marker not found in the Maven log")
     if "No errors/warnings found" not in log:
         raise ValueError("SpotBugs check success marker not found")
+    if compiled_class_count < 1:
+        raise ValueError("No compiled application classes were supplied")
     root = ET.fromstring(xml)
     if root.tag != "BugCollection":
         raise ValueError(f"Unexpected SpotBugs report root: {root.tag}")
+    # Some releases emit minimal XML without summary or project metadata.
+    # A compiled class count checks INPUT presence, never analyzer completeness.
     summary = root.find("FindBugsSummary")
-    # The plugin can emit the minimal XML format without FindBugsSummary.
-    # Project/Jar entries identify bytecode artifacts supplied to the analyzer.
-    # They are an input-coverage signal, NOT a count of classes analyzed.
-    project_jars = [
-        (node.text or "").strip()
-        for node in root.findall("./Project/Jar")
-        if (node.text or "").strip()
-    ]
     analyzed = None
-    if summary is not None:
-        analyzed = int(summary.attrib.get("total_classes", "0"))
+    if summary is not None and "total_classes" in summary.attrib:
+        analyzed = int(summary.attrib["total_classes"])
         if analyzed < 1:
-            raise ValueError("No analyzed classes in SpotBugs report")
-    elif not project_jars:
-        raise ValueError("SpotBugs report lacks both class summary and analyzed-project Jar entries")
+            raise ValueError("SpotBugs reports zero analyzed classes")
     actual = missing_names(log)
-    # Some versions also include fully qualified missing classes in the XML.
     for element in root.findall(".//MissingClass"):
         name = (element.text or "").strip()
         if name:
@@ -75,9 +68,9 @@ def evaluate(log: str, xml: str, baseline: list[str]) -> dict:
     allowed = set(baseline)
     newly_missing = sorted(actual - allowed)
     return {
-        "analyzed_classes": analyzed,
-        "project_jar_count": len(project_jars),
-        "report_evidence": "class_summary" if analyzed is not None else "project_jars",
+        "compiled_classes": compiled_class_count,
+        "analyzed_classes_reported": analyzed,
+        "xml_root": root.tag,
         "known_missing": sorted(actual & allowed),
         "new_missing": newly_missing,
         "resolved_since_baseline": sorted(allowed - actual),
@@ -90,6 +83,7 @@ def main() -> int:
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--xml", type=Path, required=True)
     parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--classes", type=Path, required=True)
     args = parser.parse_args()
     try:
         baseline = json.loads(args.baseline.read_text(encoding="utf-8"))["allowed_missing"]
@@ -99,6 +93,7 @@ def main() -> int:
             args.log.read_text(encoding="utf-8"),
             args.xml.read_text(encoding="utf-8"),
             baseline,
+            sum(1 for _ in args.classes.rglob("*.class")) if args.classes.is_dir() else 0,
         )
     except (OSError, ET.ParseError, ValueError, TypeError, KeyError) as exc:
         print(f"SpotBugs coverage verification failed: {exc}", file=sys.stderr)
