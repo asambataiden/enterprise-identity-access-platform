@@ -52,7 +52,7 @@ The trust layers are independent: Keycloak authenticates the user; PKCE protects
 
 ## Operator-observed identity-bound SoD acceptance — 2026-11-13
 
-**Result:** The live signed-token self-approval test **passed the identity and HTTP-denial checks**. The independent post-run SQL readback was not yet supplied at the time of this documentation update.
+**Result:** The live signed-token self-approval test **passed the identity, HTTP-denial and independent PostgreSQL persistence/cleanup checks**.
 
 The operator synchronized `main` to PR #26's merge commit `30ce5ffedc1304dbc5547334f9ff626d593037a1`, then ran the guarded test. The terminal output confirms:
 
@@ -64,6 +64,6 @@ The operator synchronized `main` to PR #26's merge commit `30ce5ffedc1304dbc5547
 
 **Why this is meaningful:** The denial cannot be attributed merely to absence of a local DECIDE grant, because the pre-POST assertion verified it was present. Unlike the earlier run, the subject was also checked against the exact requester identity before the POST. The Python helper only decodes claims for diagnostics; the Java resource server is responsible for cryptographic token verification.
 
-**Final acceptance gate still open:** Independently query the IAM-only PostgreSQL database after this specific run and confirm that the SELF request is still PENDING, with exactly zero `access_decisions`, exactly zero `approval_audit_events`, and zero requester DECIDE grants. Do not claim that final database evidence was observed until results are supplied.
+**Final acceptance gate — PASSED:** The operator subsequently performed independent, read-only SQL against `keycloak-iam-lab-db-1` and confirmed the SELF request `feaa03df-c097-5f13-80c4-5b934ac255d5` remained `PENDING`, with `decision_rows=0`, `audit_rows=0`, and `requester_decide_grants=0`. These results, together with the previously verified browser principal binding and API HTTP 403, satisfy the **specific real-token self-approval denial acceptance requirement**. Other IAM threats and production security controls remain outside this acceptance scope.
 
 No production target call, provisioning or entitlement activation was performed.
