@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "verified_at": "2026-11-13",
+  "actions": {
+    "actions/checkout": {
+      "version": "v6",
+      "sha": "d23441a48e516b6c34aea4fa41551a30e30af803",
+      "tag_ref": "https://github.com/actions/checkout/tree/v6"
+    },
+    "actions/setup-java": {
+      "version": "v5",
+      "sha": "b6effb05e454b25005698d916606bdc6ffcbf961",
+      "tag_ref": "https://github.com/actions/setup-java/tree/v5"
+    },
+    "gitleaks/gitleaks-action": {
+      "version": "v3",
+      "sha": "e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e",
+      "tag_ref": "https://github.com/gitleaks/gitleaks-action/tree/v3"
+    },
+    "aquasecurity/trivy-action": {
+      "version": "v0.36.0",
+      "sha": "ed142fd0673e97e23eac54620cfb913e5ce36c25",
+      "tag_ref": "https://github.com/aquasecurity/trivy-action/tree/v0.36.0",
+      "tag_type": "annotated",
+      "tag_object_sha": "a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8"
+    }
+  }
+}
