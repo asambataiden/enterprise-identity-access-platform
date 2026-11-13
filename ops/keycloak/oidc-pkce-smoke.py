@@ -83,6 +83,52 @@ AND p.permission_key='ACCESS_REQUEST_DECIDE';"""
     print("PASS: token subject maps to the requester's active tenant employee with DECIDE grant (diagnostic DB readback)")
 
 
+def assert_quarantine_reviewer_binding(claims, expected_tenant, expect_grant=True):
+    """Fail closed unless this lab token maps to the exact synthetic reviewer.
+
+    Decoded claims are diagnostic only; the Java API verifies token signatures.
+    """
+    if not expected_tenant:
+        raise RuntimeError("Set IAM_LAB_TENANT_ID for reviewer assertion")
+    canonical = uuid.UUID("8230545d-3560-41e6-af0b-b1ef50778606")
+    try:
+        tenant = uuid.UUID(expected_tenant)
+        token_tenant = uuid.UUID(claims.get("tenant_id", ""))
+    except (ValueError, TypeError, AttributeError):
+        raise RuntimeError("Invalid reviewer tenant identity") from None
+    if tenant != canonical or token_tenant != tenant:
+        raise RuntimeError("Reviewer tenant mismatch")
+    if claims.get("iss") != ISSUER:
+        raise RuntimeError("Reviewer issuer mismatch")
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject or len(subject) > 255:
+        raise RuntimeError("Invalid reviewer subject")
+
+    reviewer = uuid.uuid5(tenant, "iam-lab-test-quarantine-reviewer:employee")
+    fixture_path = Path(__file__).resolve().with_name("seed-authorized-iam-fixture.py")
+    spec = importlib.util.spec_from_file_location("iam_review_binding_fixture", fixture_path)
+    fixture = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixture)
+    # Fixed lab identifiers and validated UUIDs; SQL escape opaque OIDC subject.
+    safe_subject = subject.replace("'", "''")
+    identity_sql = f"""SELECT count(*) FROM employee_identities i
+JOIN employees e ON e.tenant_id=i.tenant_id AND e.id=i.employee_id
+WHERE i.tenant_id='{tenant}' AND i.employee_id='{reviewer}'
+AND i.issuer='{ISSUER}' AND i.subject='{safe_subject}'
+AND e.lifecycle_status='ACTIVE';"""
+    if fixture.psql(identity_sql).strip() != "1":
+        raise RuntimeError("Authenticated principal is not the active synthetic quarantine reviewer")
+
+    grant_sql = f"""SELECT count(*) FROM employee_permissions
+WHERE tenant_id='{tenant}' AND employee_id='{reviewer}'
+AND permission_key='PROVISIONING_QUARANTINE_REVIEW';"""
+    grant = fixture.psql(grant_sql).strip()
+    if grant != ("1" if expect_grant else "0"):
+        raise RuntimeError("Reviewer permission state does not match expected acceptance scenario")
+    print("PASS: token subject maps to dedicated active quarantine reviewer (diagnostic DB readback)")
+    print("PASS: reviewer grant state matches expected scenario")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-url", default="http://127.0.0.1:8082/api/v1/access-requests",
@@ -96,6 +142,8 @@ def main():
                         help="Synthetic fixture tenant UUID (required for local binding diagnosis)")
     parser.add_argument("--assert-self-requester", action="store_true",
                         help="Require exact synthetic requester subject, pending request and temporary DECIDE grant before POST")
+    parser.add_argument("--assert-quarantine-reviewer", action="store_true",
+                        help="Assert exact synthetic reviewer identity and expected local grant")
     parser.add_argument("--diagnose-local-binding", action="store_true",
                         help="Read-only fixture DB check using token claims (diagnostic, not JWT verification)")
     parser.add_argument("--scope", choices=["access:request", "access:decide", "provisioning:review"], default="access:request",
@@ -107,6 +155,10 @@ def main():
     parser.add_argument("--repeat-on-success", action="store_true",
                         help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.assert_quarantine_reviewer and (not args.quarantine_list or
+            args.scope != "provisioning:review" or args.expect_status not in (200, 403)):
+        parser.error("--assert-quarantine-reviewer requires --quarantine-list, "
+                     "--scope provisioning:review and --expect-status 200 or 403")
     if args.quarantine_list:
         if args.scope != "provisioning:review" or args.decision_request_id or args.employee_id or args.application_id or args.repeat_on_success:
             parser.error("--quarantine-list requires provisioning:review and cannot combine with POST options")
@@ -230,6 +282,9 @@ def main():
 
     if args.assert_self_requester:
         assert_self_requester_binding(claims, args.expected_tenant_id, args.decision_request_id)
+    if args.assert_quarantine_reviewer:
+        assert_quarantine_reviewer_binding(
+            claims, args.expected_tenant_id, expect_grant=(args.expect_status == 200))
 
     if args.diagnose_local_binding:
         # This is a controlled local diagnostic, not a production auth check.
