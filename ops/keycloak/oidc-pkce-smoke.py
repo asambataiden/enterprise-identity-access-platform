@@ -290,7 +290,8 @@ WHERE i.tenant_id='""" + str(actual_tenant) + """'
         target_url = args.api_url.rstrip("/") + "/" + args.decision_request_id + "/decision"
     elif args.quarantine_list:
         body = None
-        target_url = args.api_url.replace("/api/v1/access-requests", "/api/v1/provisioning/quarantine")
+        target_url = urllib.parse.urlunparse((parsed_api.scheme, parsed_api.netloc,
+            "/api/v1/provisioning/quarantine", "", "", ""))
     else:
         body = json.dumps({"employeeId": employee_id, "applicationId": application_id,
                            "roleKey": "READER"}).encode()
