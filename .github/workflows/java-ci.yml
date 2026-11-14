@@ -26,6 +26,7 @@ jobs:
         run: |
           python3 -m json.tool ops/keycloak/realm/iam-lab-realm.json >/dev/null
           bash -n ops/keycloak/check-metadata.sh
+          bash -n ops/demo/run-portfolio-demo.sh
           python3 ops/keycloak/check-pkce-fixture.py
           python3 -m py_compile ops/keycloak/verify-runtime.py ops/keycloak/oidc-pkce-smoke.py ops/keycloak/provision-synthetic-user.py ops/keycloak/seed-authorized-iam-fixture.py ops/keycloak/ensure-subject-mapper.py ops/keycloak/ensure-decision-scope.py ops/keycloak/provision-synthetic-approver.py ops/keycloak/seed-approval-requests.py
           python3 -m unittest discover -s ops/keycloak -p 'test_*.py'
