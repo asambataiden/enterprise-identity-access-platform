@@ -72,6 +72,83 @@ Use existing focused tests where available, then full `mvn -B --no-transfer-prog
 
 **Answer pattern:** business need → alternative and trade-off → exact Java/SQL/HTTP workflow → negative failure behavior → named tests and evidence → remaining gap.
 
+
+## Practical lab 09A — Why quarantine is not a retry button
+
+**Business situation:** a provisioning worker has exhausted three attempts or crashed during its final claim. The work is QUARANTINED because a later blind retry may create duplicated external side effects, especially after an uncertain HTTP acknowledgement.
+
+The released design separates **diagnosis** and **remediation**:
+- [`ProvisioningRecoveryInspector`](../../src/main/java/dev/asambataiden/iam/provisioning/quarantine/ProvisioningRecoveryInspector.java) reads state, attempt count, error codes, lease timestamps and counts of mock VERIFIED/ABSENT/UNKNOWN observations.
+- [`QuarantineInspectionController`](../../src/main/java/dev/asambataiden/iam/provisioning/quarantine/QuarantineInspectionController.java) exposes **GET-only** list/detail routes.
+- [`QuarantineReviewJournal`](../../src/main/java/dev/asambataiden/iam/provisioning/quarantine/QuarantineReviewJournal.java) is a separate **internal evidence writer**, not a public authenticated admin endpoint, and cannot requeue a work item or call the target.
+
+```mermaid
+flowchart TD
+  Q[QUARANTINED work item] --> AUTH[GET reviewer: scope plus local permission]
+  AUTH --> INS[Read-only inspector]
+  INS --> E[State, attempt and observation summary]
+  E --> D{Operator analysis}
+  D --> H[Internal HOLD or ESCALATE evidence]
+  D --> R[Internal RECONCILE_REQUIRED evidence]
+  H --> STOP[No automatic release/retry]
+  R --> STOP
+  STOP -. Future separately authorized remediation .-> FUTURE[Not implemented]
+```
+
+**Why review rather than retry immediately?** A target could have applied a grant despite a timeout. Inspecting only the failure code does not establish target state.
+
+## Practical lab 09B — HTTP reviewer identity and tenant boundaries
+
+Read [`QuarantineReviewActorResolver`](../../src/main/java/dev/asambataiden/iam/provisioning/quarantine/QuarantineReviewActorResolver.java) and [`BootstrapSecurityConfiguration`](../../src/main/java/dev/asambataiden/iam/bootstrap/BootstrapSecurityConfiguration.java).
+
+1. The GET route requires `SCOPE_provisioning:review`.
+2. The resolver validates usable issuer, subject and tenant UUID claims.
+3. It binds these to an **ACTIVE tenant employee** with local `PROVISIONING_QUARANTINE_REVIEW` permission (introduced by V11).
+4. The list endpoint takes a limit **1–100** (default 20) and derives the tenant **exclusively from the resolver**.
+5. Detail GET returns a generic **404** for absent, foreign-tenant or non-QUARANTINED work. It does not disclose other tenants' records.
+6. The inspector uses `@Transactional(readOnly=true)` and tenant-scoped SQL; it has no retry, grant or work-state mutation.
+
+**Crucial boundary:** Even a valid JWT and review scope do not grant arbitrary tenant access; local actor mapping and SQL tenant predicates remain mandatory.
+
+## Practical lab 09C — Understand structured review evidence (V10/V11)
+
+Read [V10](../../src/main/resources/db/migration/V10__quarantine_review_evidence.sql) and [V11](../../src/main/resources/db/migration/V11__quarantine_review_permission.sql).
+
+The internal journal accepts an explicit `Review(tenantId,requestId,reviewId,reviewerEmployeeId,decision,reasonCode)` with:
+- decision **HOLD**, **ESCALATE**, **RECONCILE_REQUIRED**;
+- reason code **UNCERTAIN_TARGET_STATE**, **POSSIBLE_DUPLICATE**, **POLICY_REVIEW**, **DEPENDENCY_UNAVAILABLE**.
+
+Inside a transaction, it locks the work record, checks QUARANTINED state and ACTIVE reviewer, inserts with a unique review identity, then compares stored terms on replay. Identical replay is a no-op; conflicting reuse throws.
+
+**Do not confuse:** the provided reviewer UUID is evidence metadata for an **internal** service call, *not* JWT authentication. The public HTTP endpoint remains **read-only**, and no public review POST exists. Recording review is **not authorization to requeue or provision**.
+
+## Practical lab 09D — Security/failure evidence
+
+| Case | Expected outcome | Test |
+| --- | --- | --- |
+| Missing review scope | 403, no tenant data | `QuarantineInspectionHttpIT` |
+| Unmapped or inactive reviewer | 403 | `QuarantineInspectionHttpIT` |
+| Foreign tenant request | Generic 404, no information leak | `QuarantineInspectionHttpIT` |
+| Limit 0 or 101 | 400 | `QuarantineInspectionHttpIT` |
+| Inspect valid quarantined request | Bounded snapshot, no mutation | `ProvisioningRecoveryInspectorIT` |
+| Record identical review again | False/no duplicate row | `QuarantineReviewJournalIT` |
+| Conflicting review reuse | Rejected; previous evidence retained | `QuarantineReviewJournalIT` |
+| Review while not quarantined | No review mutation | `QuarantineReviewJournalIT` |
+
+```bash
+mvn -B --no-transfer-progress   -Dit.test=ProvisioningRecoveryInspectorIT,QuarantineInspectionHttpIT,QuarantineReviewJournalIT   -DfailIfNoTests=false verify
+```
+
+All tests use synthetic fixtures and PostgreSQL Testcontainers. Do not seed or reset a persistent operational work queue for this lesson.
+
+## Practical lab 09E — Incident-review exercise and interview response
+
+**Exercise:** An approval has durable work, the third provisioning lease expires, and the last attempt has a mock UNKNOWN observation. Explain: (1) why QUARANTINED is safe; (2) which inspection data are permitted; (3) why a reviewer must not blindly retry; (4) what an independent target reconciliation would have to establish; (5) what evidence belongs in a subsequent separately authorized repair procedure.
+
+**Interview answer:** “Quarantine is a safety boundary after bounded retry, not a status that can be cleared casually. The HTTP reviewer needs a scoped JWT and active tenant-local permission; the endpoint exposes bounded read-only diagnostics. Separate internal review evidence records structured HOLD/ESCALATE/RECONCILE_REQUIRED judgments without granting access or requeuing work. We would require independent target reconciliation, policy approval and a tested remediation API before automating recovery.”
+
+**Continue:** [Lesson 10 — transactional outbox and inbox](10-transactional-outbox-relay-and-inbox.md).
+
 ## Learning completion checklist
 
 - [ ] I can sketch the flow without copying the diagram.

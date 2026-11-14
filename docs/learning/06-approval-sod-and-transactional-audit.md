@@ -76,6 +76,91 @@ Use existing focused tests where available, then full `mvn -B --no-transfer-prog
 
 **Answer pattern:** business need → alternative and trade-off → exact Java/SQL/HTTP workflow → negative failure behavior → named tests and evidence → remaining gap.
 
+
+## Practical lab 06A — Design approval invariants from business requirements
+
+The business story is **one PENDING request, one distinct authorized approver, one terminal decision, one consistent audit**. Read [V3](../../src/main/resources/db/migration/V3__approval_decision_foundation.sql), [V4](../../src/main/resources/db/migration/V4__approval_transactional_audit.sql) and [`ApprovalDecisionService.java`](../../src/main/java/dev/asambataiden/iam/accessrequest/ApprovalDecisionService.java).
+
+| Rule | Actual mechanism | Why necessary |
+| --- | --- | --- |
+| Only active approved actors | Scope `SCOPE_access:decide`; local `ACCESS_REQUEST_DECIDE` lookup | Signed identity is not business authority |
+| No self-approval | Check stored requester vs approver; V3 CHECK/FK | Client cannot forge the original requester |
+| Only PENDING can change | `SELECT ... FOR UPDATE OF ar`, conditional UPDATE | Serializes opposing approvers |
+| One decision record | V3 primary key `(tenant_id,request_id)` | Protects against alternate SQL writers |
+| No missing audit | V4 AFTER INSERT audit trigger in same transaction | No partial decision/audit commit |
+| Only approved downstream intent | V5 work and V12 outbox trigger chain | Rejecting does not enqueue work |
+
+The original V1 `status = 'PENDING'` constraint is intentionally evolved by V3. The released request status vocabulary is PENDING, APPROVED and REJECTED, not the original UC-001's future ACTIVE/CANCELLED candidates.
+
+## Practical lab 06B — Read the transactional decision in order
+
+1. Reject missing tenant, approver, request or decision.
+2. Verify an ACTIVE approver with local DECIDE permission for the supplied tenant. The HTTP boundary must already have resolved the actor from JWT identity.
+3. Load the request and its active subject/application using a **tenant-scoped `SELECT ... FOR UPDATE OF ar`**.
+4. Compare approver ID with the persisted requester ID; deny self-approval even if a permission exists.
+5. Require PENDING; UPDATE only if PENDING; insert an `access_decisions` row.
+6. Allow V4 audit trigger and approved-only V5/V12 follow-on triggers to run in the **same PostgreSQL transaction**.
+7. If any SQL, trigger, constraint or service operation fails, roll back status, decision, audit, work and outbox intent together.
+
+```mermaid
+sequenceDiagram
+  actor A as Approver A APPROVED
+  actor B as Approver B REJECTED
+  participant S as ApprovalDecisionService
+  participant DB as PostgreSQL
+  A->>S: decide request R
+  B->>S: decide same R
+  S->>DB: T1 SELECT R FOR UPDATE
+  S->>DB: T2 waits for R
+  S->>DB: T1 PENDING -> APPROVED; insert decision
+  DB->>DB: Audit + approved work/outbox triggers
+  DB-->>A: COMMIT
+  S->>DB: T2 now sees terminal state
+  S-->>B: Conflict; no second decision
+```
+
+Either approver may win. “One winner” is the invariant; **APPROVED is not guaranteed**.
+
+## Practical lab 06C — What the tests prove
+
+Inspect [`ApprovalDecisionServiceIT`](../../src/test/java/dev/asambataiden/iam/accessrequest/ApprovalDecisionServiceIT.java) and [`ApprovalDecisionHttpIT`](../../src/test/java/dev/asambataiden/iam/accessrequest/ApprovalDecisionHttpIT.java).
+
+| Existing test | Required result |
+| --- | --- |
+| `authorizedDistinctApproverCanApproveOnce` | One permitted approval |
+| `requesterCannotSelfApproveEvenWithGrant` | Self-decision denied despite authority |
+| `concurrentOpposingDecisionsAllowOnlyOneWinner` | Single terminal state, one winner |
+| `approvalPersistsMatchingAuditEventAtomically` | Audit matches decision |
+| `auditInsertionFailureRollsBackRequestAndDecision` | No half-committed governance |
+| `auditFailureAlsoRollsBackProvisioningIntent` | No partial work/outbox intent |
+
+A failure in the audit trigger must not leave an approved request in durable storage. Conversely, a successful REJECTED decision has its own audit but creates no approved provisioning work.
+
+```bash
+mvn -B --no-transfer-progress   -Dit.test=ApprovalDecisionServiceIT,ApprovalDecisionHttpIT,ApprovalDecisionSchemaIT   -DfailIfNoTests=false verify
+```
+
+Use disposable Testcontainers. Record the actual checked SHA and runner results; do not claim fresh tests from this documentation update.
+
+## Practical lab 06D — Architectural trade-offs and failure semantics
+
+**Why both lock and primary key?** The lock ensures sequential business-state evaluation; the primary key independently rejects a duplicate persisted decision if another SQL writer bypasses the service. **Why both service and SoD CHECK?** Application policy gives domain-specific errors, while database constraints retain integrity.
+
+A database trigger prevents ordinary audit UPDATE/DELETE but does **not** provide tamper-proof WORM storage against privileged database operators. A real organization would need access control, retention, external evidence anchoring and independent audits.
+
+| Input | Request | Decision/audit | Work |
+| --- | --- | --- | --- |
+| Valid approval | APPROVED | One matching record | Intent only |
+| Valid rejection | REJECTED | One matching record | None |
+| Self-approval | PENDING | None | None |
+| Foreign/disabled actor | Unchanged | None | None |
+| Two competing decisions | One terminal outcome | Winner only | Approved-only if that wins |
+| Audit insertion fails | Original state retained | Rollback | No work/outbox |
+
+**Interview answer:** “The HTTP boundary maps the verified bearer into an active tenant-local DECIDE approver. Our transactional service locks the request row, compares the stored requester for SoD, requires PENDING, and inserts one decision. SQL constraints and an audit trigger reinforce the rule. A competing approver sees the committed terminal state and fails, while any audit failure rolls the entire decision back. An approved decision is work intent, not a real application grant.”
+
+**Continue:** [Lesson 07 — lease recovery and fencing](07-provisioning-intent-leases-and-fencing.md).
+
 ## Learning completion checklist
 
 - [ ] I can sketch the flow without copying the diagram.

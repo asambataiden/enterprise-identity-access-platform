@@ -80,6 +80,97 @@ Use existing focused tests where available, then full `mvn -B --no-transfer-prog
 
 **Answer pattern:** business need → alternative and trade-off → exact Java/SQL/HTTP workflow → negative failure behavior → named tests and evidence → remaining gap.
 
+
+## Practical lab 10A — Understand the dual-write problem
+
+A PostgreSQL transaction can commit an APPROVED decision, audit and a durable work item. But a message publish to an independent broker cannot be atomically committed with that local transaction without a separate distributed coordination mechanism. The **transactional outbox** stores publish intent alongside the database state, then dispatches it later.
+
+Read [V12](../../src/main/resources/db/migration/V12__provisioning_transactional_outbox.sql), [V13](../../src/main/resources/db/migration/V13__outbox_delivery_leases.sql) and [V14](../../src/main/resources/db/migration/V14__transactional_provisioning_inbox.sql).
+
+| Phase | Durable evidence | Guarantee in this project |
+| --- | --- | --- |
+| APPROVED commit | Request + decision + audit + approved work + V12 outbox | All-or-nothing **local** transaction |
+| Relay claim | V13 IN_FLIGHT + current lease token and attempt number | Single valid local claimant at a time |
+| Publish | Explicitly invoked test `OutboxEventPublisher` | Delivery may happen more than once |
+| Ack | DELIVERED if current lease token remains valid | Acknowledgment of test publisher, not target entitlement |
+| Inbox | V14 receipt + RECEIVED projection in one transaction | Exact duplicate is local no-op |
+| External target | **Not implemented** | No production broker or actual grant |
+
+## Practical lab 10B — Follow a single relay run
+
+Read [`OutboxDeliveryService.java`](../../src/main/java/dev/asambataiden/iam/provisioning/outbox/OutboxDeliveryService.java) and [`OutboxRelay.java`](../../src/main/java/dev/asambataiden/iam/provisioning/outbox/OutboxRelay.java).
+
+1. The delivery service claims **at most one event** using `FOR UPDATE SKIP LOCKED`. A V13 event's state is PENDING, RETRY_WAIT or expired IN_FLIGHT.
+2. A newly claimed event obtains a fresh UUID lease token, a bounded **5–300-second** expiry and incremented attempt number. Its immutable `eventId` is retained.
+3. The `claim()` transaction ends **before** the relay calls `publisher.publish(event)`. This is a deliberate network/DB boundary.
+4. On a publisher exception, the relay attempts to persist retry with allowlisted `PUBLISH_UNAVAILABLE` and bounded backoff; the fifth failed attempt enters DEAD_LETTER.
+5. On apparent publish success, `delivered(event)` marks DELIVERED only when the current unexpired token still matches. An expired/stale token cannot confirm another worker's event.
+6. Even if publishing succeeded, the ACK or DB mark may be lost. A subsequent relay may republish the **same event ID**. This is expected at-least-once behavior, not a defect.
+
+**Important:** `OutboxRelay` is a plain class invoked explicitly by tests. There is **no background scheduler or production event broker**. `InProcessInboxPublisher` is the in-process test bridge, not a Kafka consumer or a network authenticated listener.
+
+## Practical lab 10C — Atomic inbox processing and duplicate semantics
+
+Read [`ProvisioningInboxConsumer.java`](../../src/main/java/dev/asambataiden/iam/provisioning/inbox/ProvisioningInboxConsumer.java).
+
+Its envelope requires non-null event, tenant and request UUID; `eventType = PROVISIONING_REQUESTED`; `schemaVersion = 1`; and nonblank JSON payload.
+
+The transactional algorithm is:
+
+1. `INSERT INTO provisioning_inbox_receipts (...) ON CONFLICT(event_id) DO NOTHING RETURNING event_id`.
+2. If this event ID is new, insert the **RECEIVED** event projection in the same `@Transactional` method, then return APPLIED.
+3. If the event ID exists, compare stored tenant/request/type/version and **JSONB payload**.
+4. Exact same envelope returns DUPLICATE without inserting another projection.
+5. Changed envelope reusing an existing event ID throws an exception. A projection failure rolls back the corresponding new receipt.
+
+```mermaid
+sequenceDiagram
+  participant Relay as Explicit outbox relay
+  participant Pub as In-process publisher
+  participant In as Inbox consumer
+  participant DB as PostgreSQL
+  Relay->>DB: claim event ID E with lease
+  Relay->>Pub: publish E
+  Pub->>In: consume E
+  In->>DB: receipt E + RECEIVED projection in one transaction
+  DB-->>In: COMMIT / APPLIED
+  Note over Pub,Relay: Publisher ACK lost after successful consume
+  Relay->>DB: retry / recover E
+  Relay->>Pub: publish E again
+  Pub->>In: consume E same payload
+  In->>DB: compare existing receipt
+  DB-->>In: DUPLICATE; no new projection
+```
+
+**Exactly-once language:** The transport may deliver duplicate messages. The consumer makes one **local projection per event ID**, conditioned on the recorded envelope. It does not guarantee that any external system is updated once.
+
+## Practical lab 10D — Failure and recovery matrix
+
+| Failure timing | Durable outcome | Expected follow-up |
+| --- | --- | --- |
+| Decision transaction rolls back | No V12 event | No relay work exists |
+| Relay crashes after claim | IN_FLIGHT event and lease | Expiry and retry; max 5 attempts |
+| Publisher reports unavailable | RETRY_WAIT or DEAD_LETTER | Same event ID and bounded retry |
+| Publisher applies, ACK lost | Event may remain retryable | Duplicate delivery handled by inbox |
+| Inbox projection insert fails | Receipt + projection roll back | Retry may apply cleanly |
+| Same ID, same JSONB payload | Existing receipt | DUPLICATE no-op |
+| Same ID, changed payload/tenant | Existing receipt | Reject conflicting replay |
+| Relay token expires before ack | Stale `delivered()` returns false | Success cannot be falsely recorded |
+
+**Security boundary:** `ProvisioningInboxConsumer` is internally invoked and **does not authenticate a transport**. A real broker integration would need authenticated provenance, schema/tenant governance, retention, poison-message handling, observability and controlled redrive.
+
+## Practical lab 10E — Reproduce real integration evidence
+
+Inspect [`ProvisioningTransactionalOutboxIT`](../../src/test/java/dev/asambataiden/iam/provisioning/outbox/ProvisioningTransactionalOutboxIT.java), [`OutboxRelayIT`](../../src/test/java/dev/asambataiden/iam/provisioning/outbox/OutboxRelayIT.java), [`ProvisioningInboxConsumerIT`](../../src/test/java/dev/asambataiden/iam/provisioning/inbox/ProvisioningInboxConsumerIT.java) and [`OutboxInboxEndToEndIT`](../../src/test/java/dev/asambataiden/iam/provisioning/outbox/OutboxInboxEndToEndIT.java).
+
+```bash
+mvn -B --no-transfer-progress   -Dit.test=ProvisioningTransactionalOutboxIT,OutboxRelayIT,ProvisioningInboxConsumerIT,OutboxInboxEndToEndIT   -DfailIfNoTests=false verify
+```
+
+**Interview answer:** “Our approval transaction writes the outbox event with the business state. An explicitly invoked relay leases and publishes outside that transaction; it can republish when acknowledgment is lost. The transactional inbox atomically records a receipt and local projection, returning DUPLICATE for identical event replays and rejecting conflicting reuse. That establishes scoped local reliability patterns, not exactly-once network delivery or a real entitlement grant.”
+
+**Continue:** [Lesson 11 — CI, DevSecOps and evidence governance](11-testing-devsecops-supply-chain-and-evidence.md).
+
 ## Learning completion checklist
 
 - [ ] I can sketch the flow without copying the diagram.
