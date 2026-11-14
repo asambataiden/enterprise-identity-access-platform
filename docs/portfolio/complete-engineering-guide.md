@@ -621,6 +621,10 @@ For each capability, be prepared to answer **what problem**, **why this design**
 
 Continue with the [Technical Interview Workbook](technical-interview-workbook.md) for 30 project-specific questions with model answers, source-code references, six hands-on exercises and three mock interview rounds. The workbook retains the published tag as its evidence baseline and does not claim live Keycloak interoperability.
 
+## Applied concurrency learning cases
+
+The [Concurrency and Governance Learning Lab](../learning/19-concurrency-idempotency-approval-case-studies.md) documents actual Java and PostgreSQL implementation of six-way request idempotency and conflicting approval transactions with sequence diagrams, failure modes, code snippets, interview answers and reproducible test commands. The [UC-001 addendum](../use-cases/UC-001-concurrency-and-approval-addendum.md) links the scenarios to acceptance rules and executable evidence. Both are documentation-only enhancements published after the immutable portfolio tag.
+
 ## 13. Suggested presentation order
 
 1. Start with the business problem and UC-001.
