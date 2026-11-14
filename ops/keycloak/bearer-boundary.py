@@ -52,7 +52,7 @@ def readonly_status(endpoint: str, token: str | None) -> int:
     if token is not None:
         headers["Authorization"] = "Bearer " + token
     req = urllib.request.Request(endpoint, method="GET", headers=headers)
-    opener = urllib.request.build_opener(NoRedirect())
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
     try:
         with opener.open(req, timeout=12) as response:
             return response.status
