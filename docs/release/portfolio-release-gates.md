@@ -1,6 +1,6 @@
 # IAM capstone release candidate — scope freeze and acceptance register
 
-**Audit baseline:** `main` at `f71f9a9`, 2026-11-14, after merged PR #50. This register is a **review checklist**, not a declaration that the whole platform is ready for production.
+**Initial audit baseline:** `f71f9a9`, 2026-11-14; **RC-B merged main:** `4a2cb72` (PR #52). This register is a **review checklist**, not a claim of production readiness. [Evidence register](evidence-register.md) and [draft release notes](portfolio-release-notes-draft.md) distinguish PR-head tests from final release verification.
 
 ## Product statement
 
@@ -28,9 +28,9 @@ This is the **portfolio release candidate**, not a production go-live. Every row
 - [ ] **RC-01 Full regression:** fresh `mvn -B --no-transfer-progress clean verify` on release-head commit with all tests successful, including Testcontainers; retain CI link and commit SHA.
 - [ ] **RC-02 Security gates:** Java CI, Gitleaks, Trivy and SpotBugs/Find Security Bugs all green at **same release-head commit**; vulnerabilities not silently suppressed.
 - [ ] **RC-03 Scope truthfulness:** README, roadmap, capability matrix, threat model and diagrams consistently distinguish local/test-only mechanisms from unimplemented production capabilities.
-- [ ] **RC-04 Repeatable local demo:** run [the staged Testcontainers portfolio demo](portfolio-demo-runbook.md) via `bash ops/demo/run-portfolio-demo.sh` and record zero test failures. The stages use **independent fixtures**, not one shared request/session; test seed SQL is setup, not an HTTP API call. Live Keycloak is not required, and no real entitlement is granted.
-- [ ] **RC-05 Operating notes:** document prerequisites, startup/shutdown, expected health check, isolated test database, log redaction, rollback limitations and known failure scenarios.
-- [ ] **RC-06 Evidence index:** record the demo and regression command/results, immutable commit, CI URLs, architecture/sequence diagrams and outstanding limitations without committing token/secret values.
+- [x] **RC-04 Repeatable local demo (PR #52 head):** run [the staged Testcontainers portfolio demo](portfolio-demo-runbook.md) via `bash ops/demo/run-portfolio-demo.sh` and record zero test failures. The stages use **independent fixtures**, not one shared request/session; test seed SQL is setup, not an HTTP API call. Live Keycloak is not required, and no real entitlement is granted. **Observed 2026-11-14:** 5 Surefire + 46 Failsafe tests passed on PR-head `4f9f563a79443f88b0193e709aa3703654820a87`; rerun on final release head remains under RC-01/RC-06.
+- [x] **RC-05 Operating notes (documented):** [local operating runbook](local-operations-runbook.md) covers prerequisites, startup/shutdown, isolated database, health, redaction, rollback limitations and known failures; reviewer sign-off remains RC-07.
+- [ ] **RC-06 Final evidence index:** [evidence register](evidence-register.md) records existing demo/CI/architecture/limitations. **Final merged release-head SHA, regression and final CI evidence remain unverified**; do not mark done yet.
 - [ ] **RC-07 Reviewer sign-off:** source code and evidence reviewed for ownership, least privilege, bad-path behavior, test coverage and portfolio accuracy.
 
 ### Deferred — explicitly **not** release-candidate blockers
@@ -66,3 +66,11 @@ Running `mvn spring-boot:run` against the default datasource requires the operat
 **Why no live Keycloak requirement for the deterministic demo?** Security controls are validated at different boundaries: Spring Security mocked-principal authorization tests, real RSA-signed offline HTTP tests, and local IdP metadata checks. Live OIDC interoperability remains unverified and must never be relabeled as passed.
 
 **Why a scope freeze?** It makes completion, reproducibility and truthful risk reporting the primary engineering deliverables instead of endlessly expanding the architecture.
+
+## Release operational and evidence documents
+
+- [Local operations and failure runbook](local-operations-runbook.md)
+- [Evidence ledger and pending final verification](evidence-register.md)
+- [Draft portfolio release notes](portfolio-release-notes-draft.md)
+
+**No tag or public release announcement until RC-01, RC-02, RC-03, RC-06 and RC-07 are verified for the final merged release commit.**
