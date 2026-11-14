@@ -60,7 +60,7 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant R as Explicit test relay
     participant I as Transactional inbox
-    C->>API: Decision with signed JWT
+    C->>API: Decision with authorized HTTP principal (mock-JWT HTTP IT)
     API->>DB: Approval + audit + provisioning work + outbox event (atomic)
     DB-->>API: Commit
     R->>DB: Claim event with lease token; commit
@@ -84,4 +84,4 @@ sequenceDiagram
 
 The observed local regression for 04G-4 was **13 unit + 95 integration tests**, plus **33 Python tests**, all passing. GitHub Java CI was successful for PRs #35 and #36; the merge head of #36 is `3350df1`. This verifies the tested implementation, not production deployment or performance characteristics. For provenance and links, see [Milestone 04 closeout](../milestones/04-closeout-evidence.md).
 
-Next: Milestone 05 focuses on repeatable DevSecOps scanning, hardening, deployability, monitoring and failure evidence. Do not add a broker, multicloud design or SCIM support without a measured use case.
+**Later release-audit update (2026-11-14):** Security CI and offline RSA-signed HTTP JWT negative tests were added after this Milestone 04 snapshot. See the [current evidence register](../release/evidence-register.md) and [scope-frozen release gates](../release/portfolio-release-gates.md). The approval HTTP integration test uses a mocked JWT principal; separately, the signed-JWT HTTP filter suite uses test-only RSA keys and decoder. Neither proves live Keycloak interoperability. Production broker, provisioning target, deployment and SCIM remain absent.
