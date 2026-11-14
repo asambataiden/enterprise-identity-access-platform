@@ -71,6 +71,79 @@ Use existing focused tests where available, then full `mvn -B --no-transfer-prog
 
 **Answer pattern:** business need → alternative and trade-off → exact Java/SQL/HTTP workflow → negative failure behavior → named tests and evidence → remaining gap.
 
+
+## Practical lab 07A — Follow approved intent into durable work
+
+Read [V5](../../src/main/resources/db/migration/V5__approved_provisioning_work_items.sql), [V6](../../src/main/resources/db/migration/V6__provisioning_lease_state.sql) and [V7](../../src/main/resources/db/migration/V7__simulated_provisioning_verification.sql).
+
+V5 creates an approval-bound READY work item **within the approved transaction**. V6 adds LEASED, RETRY_WAIT, QUARANTINED, a token, expiry, next-attempt time, attempt count and bounded failure codes. V7 supports a *separate local synthetic* success demonstration. Neither V5 nor a V7 SUCCEEDED status is evidence of external access.
+
+```mermaid
+stateDiagram-v2
+  [*] --> READY: Approved work committed
+  READY --> LEASED: claim
+  LEASED --> RETRY_WAIT: Failure with attempts left
+  RETRY_WAIT --> LEASED: Backoff elapsed
+  LEASED --> QUARANTINED: Third failure / expired final lease
+  LEASED --> SUCCEEDED: Separate V7 synthetic verification
+```
+
+## Practical lab 07B — Understand `ProvisioningLeaseService`
+
+Open [`ProvisioningLeaseService.java`](../../src/main/java/dev/asambataiden/iam/provisioning/execution/ProvisioningLeaseService.java).
+
+1. `claim(tenantId, leaseSeconds)` accepts **5–300 seconds** and only a non-null tenant.
+2. It first quarantines expired LEASED rows already at the **three-attempt limit**; a crashed final attempt cannot remain abandoned forever.
+3. It selects one eligible READY/RETRY_WAIT or expired LEASED row for the tenant, ordered by creation time, using `FOR UPDATE SKIP LOCKED`.
+4. A successful claim creates a **fresh UUID token**, sets expiry using the **database clock**, and increments the persisted attempt count.
+5. `renew(lease,duration)` requires current state, matching token and an unexpired lease; only the current worker can extend ownership.
+6. `fail(lease,error,delay)` accepts delays of **1–3600 seconds** and enum codes `TEMPORARY_DEPENDENCY_FAILURE`, `TIMEOUT` and `UNKNOWN`. It releases to RETRY_WAIT or QUARANTINED.
+7. No method calls a target; this service is a **durable-work coordinator**, not a provisioning implementation.
+
+**Why `SKIP LOCKED`?** It avoids workers queueing behind an already-locked candidate row, so concurrent claimers can make progress across independent work items. It does not ensure fair global scheduling or cloud availability.
+
+## Practical lab 07C — A stale-worker timeline
+
+```mermaid
+sequenceDiagram
+  participant A as Worker A
+  participant DB as PostgreSQL
+  participant B as Worker B
+  A->>DB: claim R
+  DB-->>A: Token A, attempt 1
+  Note over A: Pauses past lease expiry
+  B->>DB: recover expired R
+  DB-->>B: Token B, attempt 2
+  A->>DB: renew/fail with token A
+  DB-->>A: false; stale token
+  B->>DB: renew/fail with token B
+  DB-->>B: Current token may mutate R
+```
+
+**Leases versus row locks:** PostgreSQL row locks protect the short claim/update transaction. A persisted lease represents ownership *after commit*. Do not hold a transaction open while waiting for remote HTTP.
+
+**Safety boundary:** A stale worker cannot modify current **local lease state**. It may already have sent a remote POST; the database cannot undo that side effect. Lesson 08 adds target idempotency/readback.
+
+## Practical lab 07D — Test and diagnose
+
+Review [`ProvisioningLeaseServiceIT`](../../src/test/java/dev/asambataiden/iam/provisioning/execution/ProvisioningLeaseServiceIT.java) and [`SimulatedProvisioningServiceIT`](../../src/test/java/dev/asambataiden/iam/provisioning/execution/SimulatedProvisioningServiceIT.java).
+
+```bash
+mvn -B --no-transfer-progress   -Dit.test=ProvisioningLeaseServiceIT,SimulatedProvisioningServiceIT   -DfailIfNoTests=false verify
+```
+
+| Failure | Local behavior | Unproven boundary |
+| --- | --- | --- |
+| Two worker claims collide | Current row lock/token decides ownership | No cloud worker pool |
+| Worker crashes | Lease expires; eligible for retry | No production watchdog |
+| Third failure/expired third claim | QUARANTINED | No automated remediation |
+| Old worker returns | Token/expiry check rejects state mutation | Remote side effect may remain |
+| Local synthetic completion | Requires V7 simulated evidence | Not a real IAM grant |
+
+**Interview answer:** “Approved decisions create durable work; workers claim work under a bounded PostgreSQL lease with `FOR UPDATE SKIP LOCKED`. Lease tokens are rotated and checked on each state change, so a recovered worker fences out an old worker. We cap retries at three and quarantine exhausted work. This protects local coordination, not exactly-once execution or a real target entitlement.”
+
+**Continue:** [Lesson 08 — mock target and uncertain HTTP reconciliation](08-adapter-contract-mock-http-reconciliation.md).
+
 ## Learning completion checklist
 
 - [ ] I can sketch the flow without copying the diagram.
