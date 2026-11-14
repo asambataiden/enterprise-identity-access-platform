@@ -48,6 +48,27 @@ mvn spring-boot:run -Dspring-boot.run.profiles=openapi-local \
 
 Then visit `http://127.0.0.1:8082/swagger-ui.html` or `http://127.0.0.1:8082/v3/api-docs`. These URLs are available **only while that local process/profile is running**. The browser UI is documentation-first; Try it out is disabled to avoid accidental access-request/approval mutations.
 
+## Runtime semantic contract guard
+
+The `LocalOpenApiExposureIT.generatedApiAgreesWithCanonicalBusinessOperationsAndModels` Testcontainers test compares a **live, Spring-generated `/v3/api-docs` response** in the `openapi-local` profile with the checked-in canonical `docs/api/openapi.json`. It asserts:
+
+- Same four public paths and HTTP methods, without inadvertently published internal routes.
+- Same documented HTTP response-code sets and per-operation bearer security requirements.
+- Required request parameters, including the idempotency key, and relevant min/max/default constraints.
+- Same names of fields in the five canonical input/output schemas.
+- No tenant or requester identity becomes writable in `CreateAccessRequest`.
+
+This is a **selected semantic drift gate**, not full OpenAPI equivalence. Differences in prose, server URL, operation IDs, generated error-body structure, nullable encoding, and JSON element ordering are intentionally excluded. A failed comparison requires investigating the generated contract and correcting the implementation, annotations or reviewed canonical specification; do not silently weaken checks to restore green CI.
+
+Reproduce with Docker:
+
+```bash
+mvn -B --no-transfer-progress \
+  -Dit.test=LocalOpenApiExposureIT -DfailIfNoTests=false verify
+```
+
+The test runs inside the existing disposable PostgreSQL 17 integration fixture. It does not publish Swagger externally, require Keycloak credentials, or grant real entitlements.
+
 ## Next API governance gates
 
 - Review the generated schema and canonical contract side-by-side, including required fields, enums, nullability, idempotency headers and 201/409 semantics.
