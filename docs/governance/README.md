@@ -28,11 +28,11 @@ This repository is presently owned/operated as a **single-maintainer educational
 - `Dependency vulnerabilities (Trivy)` — Security CI scanner.
 - `Java static analysis (SpotBugs + Find Security Bugs)` — Security CI SAST job.
 
-These are **check-run context names**, not the UI's combined `Workflow / Job` labels. GitHub resolves required checks by context (and optionally app ID); requiring `Java CI/verify` as a literal check name would be incorrect. See [GitHub required checks documentation](https://docs.github.com/en/rest/branches/branch-protection).
+These are **check-run context names**, not the UI's combined `Workflow / Job` labels. This payload uses the REST API's `contexts` representation. Do not send both `contexts` and `checks` in the same `required_status_checks` object: the REST schema treats them as mutually exclusive alternatives and returns HTTP 422 when both are present. The separate `checks` representation supports app IDs, but this policy uses the verified context names alone. Requiring `Java CI/verify` as a literal check name would be incorrect. See [GitHub required checks documentation](https://docs.github.com/en/rest/branches/branch-protection).
 
 ## Planned settings are not automatically active
 
-[`main-branch-protection.json`](main-branch-protection.json) is a proposed full GitHub classic branch-protection request body, not an executable deployment or a claim that branch protection has been enabled.
+[`main-branch-protection.json`](main-branch-protection.json) is a proposed GitHub classic branch-protection request body, not an executable deployment or a claim that branch protection has been enabled.
 
 After the documentation PR is merged **and all existing CI checks have passed**, review the JSON carefully. For a personal public repository where the authenticated account has administrator privileges, apply **once**:
 
@@ -55,7 +55,7 @@ gh api --method PUT \
 
 This action requires a GitHub CLI token with **repository Administration (write)** access. The connected GitHub integration has read access for rulesets but cannot perform this admin-level mutation; therefore this repository file **does not enforce any protection until the owner runs the command**.
 
-If GitHub returns 403, check `gh auth status`, repository role and token scopes rather than weakening policy. If it returns 422, inspect and adjust GitHub's validation error; in particular verify exact context names, availability, app ID, and review settings. Do not blindly submit a partial protection payload that omits the four gates.
+If GitHub returns 403, check `gh auth status`, repository role and token scopes rather than weakening policy. If it returns 422, inspect and adjust GitHub's validation error; in particular verify exact context names, availability, and review settings. Do not blindly submit a partial protection payload that omits the four gates.
 
 ### Prove the applied policy
 
