@@ -1,6 +1,6 @@
 # IAM platform — security threat model and verification boundaries
 
-**Baseline:** `3350df1`, 2026-11-13. This is a threat-driven engineering checklist, **not** an audit, certification or security test report.
+**Original as-built baseline:** `3350df1`, 2026-11-13; **release review baseline:** `4a2cb72`, 2026-11-14. This is a threat-driven engineering checklist, **not** an audit or certification. See [release evidence](../release/evidence-register.md).
 
 ## Trust boundaries
 
@@ -22,11 +22,11 @@
 | Duplicate event publication | Stable event identity, V14 inbox transaction and duplicate/conflict tests | Broker delivery authentication, retention and external side-effect idempotency |
 | Outbox worker crashes, stale lease | V13 lease token fencing, retry and dead-letter state | Automated alerting, controlled re-drive and operations playbook |
 | Uncertain target state | Simulation, observation and quarantine evidence | Real target readback and reconciliation not implemented |
-| Secrets and sensitive logs | Review standards and synthetic local lab | Automated secret scanning and runtime secret store not yet verified |
-| Deployment/container compromise | Deny-by-default and local Docker test environment | Threat-driven hardening and repeatable deployment in Milestone 05 |
+| Secrets and sensitive logs | Synthetic lab plus hosted Gitleaks secret scanning and curated CI evidence | Runtime secrets store, secret rotation and actual log redaction in production not verified |
+| Deployment/container compromise | Deny-by-default and disposable local Docker test environment | Production deployment, isolation and hardening remain unverified |
 
-## Required Milestone 05 gates
+## Remaining production-readiness gates (outside portfolio RC)
 
-Define ownership, severity, evidence link and reproducible negative test for each production-facing control before claiming readiness. Include TLS configuration, least-privilege client permissions, dependency/secrets scanning, authorization regression, redacted structured logs, monitored outbox lag/dead letters, and a restoration drill where applicable.
+Before **production** claims, establish ownership, severity, evidence links, TLS and least-privilege policy, production token/JWKS integration, redacted structured logs, outbox lag/dead-letter monitoring, backup/restore and a documented security review. Dependency/secrets/SAST **CI checks** and offline JWT negative tests are implemented; production security qualification remains separate.
 
 References: [OWASP ASVS](https://asvs.owasp.org/) and [OAuth 2.0 Security Best Current Practice (RFC 9700)](https://www.rfc-editor.org/rfc/rfc9700.html). A reference to a standard is **not** a claim of verified conformance.
