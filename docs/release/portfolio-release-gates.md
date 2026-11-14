@@ -1,5 +1,7 @@
 # IAM capstone release candidate — scope freeze and acceptance register
 
+**Historical checklist notice:** This register preserves the original candidate-stage gates; `v0.1.0-portfolio` was subsequently released and tested at immutable `cf0e2fc`. Local live Keycloak authentication and reviewer authorization were later verified on `main` under [06C](../milestones/06c-live-keycloak-bearer-acceptance.md) and [06D](../milestones/06d-live-keycloak-reviewer-authorization.md). These later tests do **not** retroactively change the historical tag. A new tag requires new final-SHA verification.
+
 **Initial audit baseline:** `f71f9a9`, 2026-11-14; **RC-B merged main:** `4a2cb72` (PR #52). This register is a **review checklist**, not a claim of production readiness. [Evidence register](evidence-register.md) and [draft release notes](portfolio-release-notes-draft.md) distinguish PR-head tests from final release verification.
 
 ## Product statement
