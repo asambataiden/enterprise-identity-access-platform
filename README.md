@@ -41,7 +41,8 @@ See the [scope-frozen portfolio release checklist](docs/release/portfolio-releas
 
 ## Documentation map
 
-- [Complete engineering guide: use cases, implementation journey, tech stack, diagrams and interview preparation](docs/portfolio/complete-engineering-guide.md)
+- [Complete engineering guide: use cases, implementation journey, tech stack and architecture diagrams](docs/portfolio/complete-engineering-guide.md)
+- [Technical Interview Workbook: source-level questions, model answers and practical exercises](docs/portfolio/technical-interview-workbook.md)
 
 - [UC-001: Request employee access](docs/use-cases/UC-001-application-access-request.md)
 - [Milestone 01A: tenant-scoped persistence and idempotency](docs/milestones/01a-persistence-invariants.md)
