@@ -178,3 +178,6 @@ For the optional live metadata lab, first check whether port 8281 or the Compose
 - [ ] I have recorded questions, mistakes and lessons learned in my own notes without adding secrets to Git.
 
 **Next:** [Curriculum index](README.md) and the next numbered lesson.
+## Read-only live Keycloak bearer-boundary exercise
+
+See [Milestone 06C](../milestones/06c-live-keycloak-bearer-acceptance.md) for the loopback-only synthetic browser PKCE flow. Live acceptance is pending; CI tests its helper logic but cannot substitute for real login.
