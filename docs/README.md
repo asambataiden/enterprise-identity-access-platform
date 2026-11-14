@@ -4,6 +4,10 @@ This directory is the **single navigation entry point** for learning and present
 
 **Published implementation release:** `v0.1.0-portfolio` → `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391` (immutable tag). Later documentation changes live on `main`; they are not part of that historical tag.
 
+## GitHub repository governance
+
+The [main branch protection policy and operational setup](governance/README.md) documents the four required CI jobs, solo-maintainer PR workflow, administrator enforcement, required conversation resolution and verification steps. The [proposed REST configuration](governance/main-branch-protection.json) is a **configuration template**, not proof that GitHub branch protection is active; it requires a separate GitHub admin action after review.
+
 ## API contract governance
 
 The [OpenAPI 3.1 contract](api/README.md) defines the four real public business HTTP operations, JWT/scope requirements, request and response models, expected status codes and the limits of current documentation exposure. The [machine-readable JSON contract](api/openapi.json) is checked by the Python security-test suite; generated OpenAPI and Swagger UI are now **disabled by default**, with an explicit loopback-only `openapi-local` development profile and HTTP regression tests.

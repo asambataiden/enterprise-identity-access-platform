@@ -11,3 +11,8 @@
 *.p12
 *.jks
 secrets/
+
+# Local IDE and Python interpreter artifacts (preserve the files on disk).
+*.iml
+__pycache__/
+*.py[cod]
