@@ -61,9 +61,9 @@ The diagram summarizes the implemented or explicitly optional lab flow; it does 
 
 ## Verification / existing evidence
 
-- `src/test/java/dev/asambataiden/iam/bootstrap/SignedJwtTrustValidationTest.java`
-- `src/test/java/dev/asambataiden/iam/bootstrap/SignedJwtHttpFilterIT.java`
-- `src/test/java/dev/asambataiden/iam/bootstrap/ActorResolverInvalidClaimsTest.java`
+- `src/test/java/dev/asambataiden/iam/security/SignedJwtTrustValidationTest.java`
+- `src/test/java/dev/asambataiden/iam/security/SignedJwtHttpFilterIT.java`
+- `src/test/java/dev/asambataiden/iam/security/ActorResolverInvalidClaimsTest.java`
 
 Use the relevant focused test where available, then run the full suite with `mvn -B --no-transfer-progress clean verify`. Python lab helpers use `python3 -m unittest discover -s ops/keycloak -p 'test_*.py'`. CI evidence is commit-specific; the recorded release results are in [release closeout](../release/evidence-register.md) and [portfolio guide](../portfolio/complete-engineering-guide.md). **Do not claim a new PASS without running it.**
 
