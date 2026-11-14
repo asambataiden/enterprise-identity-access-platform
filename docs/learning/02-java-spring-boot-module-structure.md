@@ -312,6 +312,14 @@ mvn -B --no-transfer-progress clean verify
 
 **Next:** [Lesson 03 — PostgreSQL, Flyway V1–V2 and tenant persistence](03-postgresql-flyway-tenant-persistence.md).
 
+## API contract practice — OpenAPI 3.1
+
+The [versioned OpenAPI contract](../api/openapi.json) describes the three controllers' **four** public business operations. Read the [OpenAPI learning guide](../api/README.md) alongside the controller-to-service walkthrough: compare `CreateRequest` with the documented three client fields; locate the required `Idempotency-Key` header; explain why an equivalent replay returns 201 and changed intent 409; compare the decision enum and the quarantine GET-only list/detail endpoints.
+
+**Security exercise:** explain why a `bearerAuth` description does not itself enforce JWT signature, route scope, local tenant permission or SoD. The actual filter and actor resolvers do. Internal outbox, lease and mock target services do **not** become REST endpoints by being represented in architecture diagrams.
+
+**Evidence exercise:** run `python3 -m unittest ops.security.test_iam_openapi_contract -v` and note the checked SHA. This statically compares known source routes, scope metadata and schema fields; it is **not** a runtime OpenAPI/swagger test. Runtime generation and opt-in Swagger UI are follow-up engineering work, not features already installed.
+
 ## Learning completion checklist
 
 - [ ] I can explain the concepts without reading the implementation.
