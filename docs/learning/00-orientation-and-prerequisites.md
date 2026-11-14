@@ -69,6 +69,119 @@ Use the relevant focused test where available, then run the full suite with `mvn
 
 **Answer pattern:** state the business risk → identify class and SQL or protocol boundary → explain normal and failure paths → name test + exact scope → disclose what remains unproven.
 
+## Practical lab 00A — Inspect the released project without modifying it
+
+### 1. Verify which code you are reading
+
+```bash
+git status --short --branch
+git rev-parse HEAD
+git rev-parse 'v0.1.0-portfolio^{commit}'
+git show --no-patch --format='%h %s' v0.1.0-portfolio
+```
+
+**Why:** `main` includes later learning/documentation changes; the tagged release is immutable. Never assume `main` and the release tag have the same SHA. Record both separately.
+
+**Do not run** `git clean -fd`, `git reset --hard`, `docker system prune`, or `docker compose down -v` as part of the learning lab. Your local repository may contain untracked working scripts that should be preserved.
+
+### 2. Build a dependency map from the actual POM
+
+Open `pom.xml`. Locate these entries:
+
+| Dependency or plugin | Current role | Why it matters |
+| --- | --- | --- |
+| Spring Boot parent 4.1.2 / Java 25 | Version and dependency governance | One reproducible Java toolchain |
+| Spring WebMVC | Controllers and servlet HTTP routing | Expose scoped request, decision and read-only quarantine APIs |
+| Spring Security + OAuth2 Resource Server | Authentication and route authorization | JWT trust is delegated; not a custom password store |
+| Spring JDBC + PostgreSQL | Explicit relational queries and transactions | Composite tenant constraints, row locks, durable evidence |
+| Flyway + PostgreSQL Flyway module | Schema migrations V1–V14 | Same schema in disposable integration databases |
+| Spring Boot test / JUnit / Mockito | Application, service and mocked-boundary validation | Fast policy tests; mocked identity is not a signed token |
+| Testcontainers + PostgreSQL | Disposable real database testing | Locks, FK constraints and triggers behave like PostgreSQL |
+| Surefire / Failsafe | `*Test.java` vs `*IT.java` phases | Distinguish isolated unit tests and container-backed integration tests |
+| SpotBugs + Find Security Bugs | Java static analysis | CI security gate; exclusions and known unresolved names are still risks |
+
+**Exercise:** Without running any tests, classify `AccessRequestService`, `ApprovalDecisionService` and `ProvisioningInboxConsumer` as business/data components. Explain why a `@Transactional` method cannot atomically commit an unrelated third-party HTTP response.
+
+### 3. Follow one business journey on paper
+
+```mermaid
+sequenceDiagram
+    actor Requester
+    participant API as IAM API / actor resolver
+    participant DB as PostgreSQL
+    actor Approver
+    participant Sim as Explicit mock-only components
+    Requester->>API: Request permitted app role
+    API->>DB: Persist PENDING intent
+    Approver->>API: APPROVED (distinct permitted actor)
+    API->>DB: Decision + audit + approved work + outbox
+    DB-->>API: COMMIT
+    Note over DB,Sim: Approval is not an external entitlement
+    Sim->>DB: Claim lease and record attempt
+    Sim->>Sim: Loopback target readback/apply
+    Sim->>DB: Mock observation
+    Sim->>DB: Explicit outbox-to-inbox RECEIVED projection
+```
+
+This is a **conceptual sequence of independently validated features**, not one deployed end-to-end transaction. The curated demo uses separate synthetic fixtures across test classes, not the same request ID across every stage.
+
+Answer before continuing:
+
+1. Who is authenticated by Keycloak, and where is resource authorization decided?
+2. Which database event happens only after approval?
+3. Which facts would establish a real target grant? **None in this release.**
+4. Why can an outbox event be DELIVERED while real access remains unavailable?
+5. What creates a valid input for a provisioning worker, and what prevents self-approval?
+
+### 4. Execute the safe deterministic demo
+
+```bash
+java -version
+mvn -version
+docker info
+bash -n ops/demo/run-portfolio-demo.sh
+bash ops/demo/run-portfolio-demo.sh
+```
+
+**Expected prerequisites:** Java 25, Maven 3.9+, a functioning Docker engine with permission to start disposable PostgreSQL 17 containers. **Do not need:** Keycloak password, running API on port 8082, cloud account, personal IAM user or a real target.
+
+A successful script ends in `PASS`; a failure must be investigated using terminal output and `target/surefire-reports`/`target/failsafe-reports`. **This document does not assert that your new run passed.** The historical release-head run recorded 5 unit + 46 integration executions, a subset of the full regression.
+
+### 5. Distinguish evidence layers
+
+| Evidence | Proves | Does not prove |
+| --- | --- | --- |
+| Java unit tests | Branch logic and policy invariants in isolation | Real database locks or external HTTP |
+| PostgreSQL Testcontainers ITs | Real FK/uniqueness/trigger/transaction behavior in isolated fixtures | Production DB HA, backup or traffic performance |
+| HTTP tests with injected principal | Route scopes and application policy responses | JWT cryptographic signature validation |
+| Test RSA decoder/filter ITs | Cryptographic rejection through actual servlet filter under test config | Live Keycloak-issued JWT interoperability |
+| Local Keycloak metadata smoke | Discovery issuer and JWKS metadata readiness | Successful browser login and live bearer API acceptance |
+| CI Gitleaks/Trivy/SAST | Configured detectors passed for a commit | Full security certification or comprehensive analyzer coverage |
+
+Write down **one supported claim and one unsupported claim** for every tool. This distinction is central to the project's architecture and interview framing.
+
+### 6. Write your personal learning record
+
+Use this template in your own notes (you do not need to add real machine usernames or passwords to Git):
+
+```text
+Lesson: 00
+Git HEAD: ...
+Published portfolio tag commit: ...
+Java / Maven / Docker versions: ...
+Demo command and actual exit status: ...
+Tests executed / observed counts: ...
+Business problem explained in my words: ...
+Architecture boundaries I can draw: ...
+One failure or uncertainty I investigated: ...
+One misconception corrected: ...
+Remaining question for Lesson 01: ...
+```
+
+## Example explanation to a technical interviewer
+
+> “I started by defining an employee-access governance use case, not by deploying microservices. The application uses a modular Java/Spring Boot service with explicit PostgreSQL constraints and transactions. I can reproduce the core behavior through disposable Testcontainers fixtures and explain each authorization, approval, retry and event-processing boundary. Our portfolio release verifies those controlled scenarios but does not claim real external entitlements or live Keycloak-issued token acceptance. The documented release SHA and CI links make that distinction auditable.”
+
 ## Learning completion checklist
 
 - [ ] I can explain the concepts without reading the implementation.
