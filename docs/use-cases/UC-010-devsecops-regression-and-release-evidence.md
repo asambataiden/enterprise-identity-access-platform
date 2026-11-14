@@ -14,15 +14,23 @@
 
 ## Main path — Given / When / Then
 
-**Given** valid preconditions and a correctly scoped internal or HTTP caller, **when** this workflow is invoked, **then** JUnit/Python and configured Gitleaks, Trivy, SpotBugs/Find Security Bugs checks pass at a specified SHA; curated evidence records tested run/attempt; educational release claims use that immutable commit only.
+**Given** a developer has opened a pull request or pushed a reviewed change, **when** the GitHub Actions workflows execute against that exact tested Git ref, **then**:
 
-### Step-by-step implementation reasoning
+1. Java CI configures Java 25, validates helper assets and Python tests, runs Maven Surefire/Failsafe with Testcontainers, and generates a curated Java evidence manifest on successful validation.
+2. Security CI runs Gitleaks secret detection, Trivy vulnerability scanning and SpotBugs/Find Security Bugs with the unresolved-reference regression guard.
+3. The configured workflow action references are verified against the pinned SHA inventory; read-only permissions and non-persistent checkout credentials limit workflow access.
+4. Successful jobs yield run- and commit-specific evidence; failed or empty test/SAST reports must not produce a false positive success manifest.
+5. A reviewer uses actual job status, tested SHA and documented coverage limits to decide whether to merge; publication of an educational Git tag is a **separate** owner action after merged-main validation.
 
-1. Establish the trust boundary and input that must never be accepted as unverified authority.
-2. Trace the Java entry point and distinguish HTTP-authenticated controllers from internal-only or explicit test collaborators.
-3. Trace the persistence rules/migration and identify the transaction/lease/event identity that makes a retry safe.
-4. Inspect the existing tests, including at least one rejection, race or rollback scenario.
-5. Distinguish the recorded test evidence and mocked actors from any live IdP/broker/third-party claim.
+This is a CI governance scenario; it has **no HTTP actor, entitlement request, Java REST controller or database transaction of its own**.
+
+### Step-by-step source review
+
+1. Open `.github/workflows/java-ci.yml` and `.github/workflows/security-ci.yml`; identify triggers, jobs, minimal repository permissions and the actual commands.
+2. Review `config/github-actions-pins.json` and `ops/security/verify_github_actions_pins.py`; demonstrate the difference between immutable commit refs and mutable tags within the supported parser scope.
+3. Inspect `pom.xml`, `config/spotbugs-exclude.xml`, and `ops/security/verify_spotbugs_coverage.py`; explain why a green SAST check is still subject to documented exclusions and unresolved reference names.
+4. Inspect `ops/security/create_ci_evidence.py` and its tests: understand report parsing, SHA-256 digests, run attempt identity, refusal of empty/failed suites, and why raw logs/XML are not uploaded.
+5. For the published educational release compare the tag SHA against the exact [final push CI and local regression evidence](../release/evidence-register.md). Do **not** attribute CI results from an earlier PR head to a different merged commit.
 
 ## Negative acceptance and recovery
 
@@ -63,8 +71,13 @@ Diagram shows implemented contract or controlled test flow; it does not imply a 
 - [`ops/security/verify_github_actions_pins.py`](../../ops/security/verify_github_actions_pins.py)
 - [`ops/security/verify_spotbugs_coverage.py`](../../ops/security/verify_spotbugs_coverage.py)
 
-**Database / related persistence**
-- [`src/main/resources/db/migration/V14__transactional_provisioning_inbox.sql`](../../src/main/resources/db/migration/V14__transactional_provisioning_inbox.sql)
+**Workflow and configuration**
+- [`.github/workflows/java-ci.yml`](../../.github/workflows/java-ci.yml)
+- [`.github/workflows/security-ci.yml`](../../.github/workflows/security-ci.yml)
+- [`config/github-actions-pins.json`](../../config/github-actions-pins.json)
+- [`config/spotbugs-exclude.xml`](../../config/spotbugs-exclude.xml)
+
+**Database migration:** Not applicable to this CI use case. Flyway V1–V14 are verified as part of Java integration tests, but UC-010 introduces no additional schema migration.
 
 **Existing executable tests and validators**
 - [`ops/security/test_create_ci_evidence.py`](../../ops/security/test_create_ci_evidence.py)
@@ -74,8 +87,8 @@ Diagram shows implemented contract or controlled test flow; it does not imply a 
 ## Review, reproduction and interview questions
 
 - Run only the relevant existing tests or validators from this list; record the exact current commit, command and result. For the entire Java suite: `mvn -B --no-transfer-progress clean verify` with Docker.
-- Explain which failure could occur **after** a database commit or outside an authenticated boundary.
-- Identify the invariant that should survive a crash or retry; explain how to confirm no unauthorized state change.
+- Explain what happens when a scanner cannot retrieve its vulnerability database, a job is retried, a test report is empty, or a PR head differs from its synthetic merge SHA.
+- Identify which evidence artifacts are uploaded, their retention policy, and what they do **not** attest.
 - Name one production gap and its acceptance criterion before designing a real integration.
 
 **Evidence/limits:** release results are tied to `v0.1.0-portfolio` commit `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391`; documentation commits do not retroactively change those tests. There is no verified live Keycloak bearer interoperability, production broker or third-party entitlement provisioning.
