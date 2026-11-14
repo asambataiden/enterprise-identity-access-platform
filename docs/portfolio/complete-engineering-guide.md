@@ -617,6 +617,10 @@ For each capability, be prepared to answer **what problem**, **why this design**
 - [Evidence register](../release/evidence-register.md) — commit- and run-specific evidence.
 - [Portfolio release gates](../release/portfolio-release-gates.md) — scope and acceptance boundaries.
 
+## Technical interview workbook
+
+Continue with the [Technical Interview Workbook](technical-interview-workbook.md) for 30 project-specific questions with model answers, source-code references, six hands-on exercises and three mock interview rounds. The workbook retains the published tag as its evidence baseline and does not claim live Keycloak interoperability.
+
 ## 13. Suggested presentation order
 
 1. Start with the business problem and UC-001.
