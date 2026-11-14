@@ -1,5 +1,11 @@
 # IAM portfolio — release evidence and decision record
 
+## Post-tag live Keycloak evidence (2026-11-14)
+
+The immutable `v0.1.0-portfolio` tag remains the original educational release. Later `main` gained and locally validated [06C real Keycloak PKCE JWT authentication](../milestones/06c-live-keycloak-bearer-acceptance.md) (anonymous 401, corrupted-signature 401, genuine token 403), and [06D synthetic quarantine reviewer authorization](../milestones/06d-live-keycloak-reviewer-authorization.md) (ungranted 403, granted 200 with zero list records, revoked 403). PRs [#68](https://github.com/asambataiden/enterprise-identity-access-platform/pull/68) and [#69](https://github.com/asambataiden/enterprise-identity-access-platform/pull/69) are merged. All 4 required checks passed on both PRs as reported by the repository owner. These findings support *local developer-lab interoperability*, not production IAM readiness, and they are **not part of the older release tag**.
+
+A superseding tag remains **unpublished** until fresh final-SHA Java/Python/demo and GitHub CI verification has been recorded. All remaining historical statements below describe the original release process at the dates indicated.
+
 ## Final published portfolio release (supersedes historical candidate status below)
 
 **Published on 2026-11-14:** annotated Git tag **`v0.1.0-portfolio`** points to immutable release commit **`cf0e2fce324fa6c81bf5bccc4ee49dadf1925391`**. Repository owner confirmed creating/pushing the tag; the remote annotated tag was independently checked. The final technical test and CI evidence was recorded in the discussion of [merged PR #53](https://github.com/asambataiden/enterprise-identity-access-platform/pull/53).
