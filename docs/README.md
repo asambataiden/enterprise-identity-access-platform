@@ -4,6 +4,10 @@ This directory is the **single navigation entry point** for learning and present
 
 **Published implementation release:** `v0.1.0-portfolio` → `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391` (immutable tag). Later documentation changes live on `main`; they are not part of that historical tag.
 
+## API contract governance
+
+The [OpenAPI 3.1 contract](api/README.md) defines the four real public business HTTP operations, JWT/scope requirements, request and response models, expected status codes and the limits of current documentation exposure. The [machine-readable JSON contract](api/openapi.json) is checked by the Python security-test suite; runtime Swagger UI is **not enabled** by this documentation-only increment.
+
 ## Choose your path
 
 | Audience / goal | Start | Then |
