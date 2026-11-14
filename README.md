@@ -1,5 +1,12 @@
 # Enterprise Identity & Access Management Platform
 
+## Start learning from scratch
+
+**[Complete Documentation Portal](docs/README.md)** — the main entry point for a properly ordered course: **[13 numbered lessons 00–12](docs/learning/README.md)**, **[UC-001–UC-010 acceptance catalogue](docs/use-cases/README.md)**, **[4 dedicated architecture views](docs/architecture/README.md)**, **[44 historical milestones mapped to lessons](docs/learning/13-implementation-provenance-and-milestone-map.md)**, and the [technical interview workbook](docs/portfolio/technical-interview-workbook.md). Each lesson links actual Java/SQL, diagrams, why/how, tests, failures, limits and Q&A.
+
+**Recommended order:** [Lesson 00](docs/learning/00-orientation-and-prerequisites.md) → [UC-001](docs/use-cases/UC-001-application-access-request.md) → [architecture context](docs/architecture/01-context-containers-and-modules.md) → [Lesson 01 onward](docs/learning/README.md). Historical milestone documents are retained for provenance; this curriculum is the definitive study order.
+
+
 **Status (2026-11-14):** Educational portfolio release `v0.1.0-portfolio` is published at commit `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391`. Local regression and Java/Security CI passed at that SHA. See the [complete engineering guide](docs/portfolio/complete-engineering-guide.md) for use cases, step-by-step implementation, technology choices, architecture diagrams and interview preparation. This is not production-ready: no real entitlement provisioning, production deployment or production broker; live Keycloak token interoperability remains unverified.
 
 A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governance: access requests, approval controls, tenant isolation, account lifecycle orchestration, evidence and safe provisioning integrations. **No real identities or applications are provisioned in this baseline.**
