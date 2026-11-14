@@ -1,15 +1,59 @@
 # IAM OpenAPI 3.1 contract — source and learning guide
 
-This directory contains the **versioned machine-readable public HTTP contract** for the current IAM modular-monolith API:
+This directory contains the **versioned public HTTP contract and development-only runtime OpenAPI integration** for the current IAM modular-monolith API:
 
 - [`openapi.json`](openapi.json) — OpenAPI 3.1, importable into Swagger Editor/UI, Stoplight or compatible client generation tools.
 - [Standard-library contract guard](../../ops/security/test_iam_openapi_contract.py) — checks that the four documented operations still match the known controller routes, permission metadata, request bodies and response shapes.
 
-## Why this increment uses a checked-in specification
+## Static contract and opt-in runtime generation
 
-The existing API is **default-deny**, the local Keycloak-to-API positive token path is still unverified in the portfolio release, and runtime OpenAPI endpoints (e.g. `/v3/api-docs` and Swagger UI) would introduce **new HTTP surfaces**. The first increment therefore changes **no runtime endpoints and adds no new Maven dependencies**.
+The checked-in `openapi.json` remains the reviewed, versioned **canonical business contract**. The runtime now has a second, dynamically generated OpenAPI description using **springdoc-openapi 3.2.0**, compatible with **Spring Boot 4.1.2**. It scans the three real HTTP controllers and is intentionally **disabled unless the explicit `openapi-local` Spring profile is active**.
 
-The contract file can be loaded into a locally hosted Swagger UI or a secure offline editor. **It is not currently served by the Spring Boot application**. We should introduce `springdoc-openapi-starter-webmvc-ui:3.2.0` for Spring Boot 4.1.x only in a separate reviewed increment with explicit endpoint access policy, default-disabled configuration, and HTTP integration regression tests. Upstream springdoc [Boot 4.1 support information](https://springdoc.org/) should be rechecked at implementation time.
+| Context | `/v3/api-docs` | `/swagger-ui.html` | IAM API |
+| --- | --- | --- | --- |
+| Default profile | Disabled and default-denied | Disabled and default-denied | JWT and local permission checks unchanged |
+| `openapi-local` profile | Anonymous GET on loopback only | Anonymous GET on loopback only, Try it out disabled | JWT and local permission checks unchanged |
+| Production/public hosts | Do not activate the profile | Do not activate the profile | Requires separate deployment threat assessment |
+
+Implementation: [local profile](../../src/main/resources/application-openapi-local.yml), [profile-specific security chain](../../src/main/java/dev/asambataiden/iam/bootstrap/LocalOpenApiConfiguration.java), [default-off properties](../../src/main/resources/application.yml).
+
+The opt-in profile uses `server.address: 127.0.0.1`, and only documentation GET paths are permitted by the higher-priority development-only security chain. An operator must **not** override the bind address to `0.0.0.0` or enable this profile on a shared or production service. Other paths continue to use the existing bearer-token/default-deny security policy.
+
+**Important contract distinction:** the static OpenAPI artifact is reviewed and guarded by the existing Python tests. Generated runtime output is controller-derived; the new HTTP integration tests enforce its exact four-operation public surface, bearer scheme and default-disabled exposure. They do not yet implement a complete semantic diff of every schema property and response against the static file.
+
+## Run the focused runtime tests
+
+From the repository root, with Java 25, Maven and Docker Testcontainers available:
+
+```bash
+mvn -B --no-transfer-progress \
+  -Dit.test=OpenApiDisabledByDefaultIT,LocalOpenApiExposureIT \
+  -DfailIfNoTests=false verify
+
+python3 -m unittest ops.security.test_iam_openapi_contract -v
+```
+
+The two Java integration test classes use **disposable PostgreSQL 17** and exercise the Spring servlet filter chain. They check disabled-by-default docs, the opt-in UI and generated JSON, the four documented business operations, and continued protection of real IAM routes. This guide does not claim an observed PASS until CI or local execution reports it.
+
+### Optional local browser viewing
+
+Use a **disposable local database** configured with your own environment variables and start the API with the explicit profile; no local browser access is required for the automated tests:
+
+```bash
+# Use an existing isolated local PostgreSQL; never put real passwords in shell history or source.
+# Supply DB_URL, DB_USERNAME, DB_PASSWORD securely in your terminal environment.
+mvn spring-boot:run -Dspring-boot.run.profiles=openapi-local \
+  -Dspring-boot.run.arguments=--server.port=8082
+```
+
+Then visit `http://127.0.0.1:8082/swagger-ui.html` or `http://127.0.0.1:8082/v3/api-docs`. These URLs are available **only while that local process/profile is running**. The browser UI is documentation-first; Try it out is disabled to avoid accidental access-request/approval mutations.
+
+## Next API governance gates
+
+- Review the generated schema and canonical contract side-by-side, including required fields, enums, nullability, idempotency headers and 201/409 semantics.
+- Add a normalized semantic OpenAPI diff where justified; document intentional differences (such as implementation-inferred names/validation metadata) instead of blindly replacing the reviewed contract.
+- If a real frontend or SDK is added, include consumer-driven API contract tests and deliberate breaking-change policy.
+- Treat public documentation hosting as a **new security design**, not permission to simply enable `/v3/api-docs` for all environments.
 
 ## Public API surface and security
 
@@ -35,7 +79,7 @@ flowchart LR
   CLIENT -. bearer JWT .-> API[Spring Boot API]
   API --> ACTOR[Active tenant-local actor mapping]
   ACTOR --> DB[(PostgreSQL)]
-  SPEC -. not hosted .-> HOST[Runtime Swagger /v3/api-docs not implemented]
+  SPEC -. separate output .-> HOST[Opt-in loopback generated OpenAPI / Swagger UI]
 ```
 
 The contract is **descriptive**, not an authorization policy. The API still enforces cryptographic JWT verification, route scope, local active employee permission and resource/transaction invariants.
@@ -64,18 +108,7 @@ python3 -m unittest discover -s ops/security -p 'test_*.py'
 
 The validator uses only the Python standard library, checks exact documented routes, security metadata, model field names and required error/response codes, and blocks accidentally adding internal administration/provisioning paths to the public spec.
 
-**Limitations:** this is a **static source-level guard**, not a runtime introspection or an HTTP test proving the actual JSON serialization on every path. The OpenAPI model captures named Java records but does not prove the API rejects unknown JSON fields. The spec does not invent an exact Spring error-response JSON schema because that body was not standardized in the implemented controllers.
-
-## Recommended next implementation increment — runtime generation
-
-After reviewing this contract, add the Spring Boot 4-compatible `springdoc-openapi` starter and:
-
-1. Provide route and schema annotations or configuration where automatic inference is insufficient.
-2. Document JWT bearer, route scope, local permissions, `Idempotency-Key`, 201/409 and approval/SoD.
-3. **Disable Swagger/OpenAPI endpoints by default**, enable only under a reviewed local development profile; ensure documentation access is explicitly permitted/denied as intended without weakening the `anyRequest().denyAll()` fallback.
-4. Add `MockMvc` + Testcontainers tests proving anonymous/malformed/scopeless access behavior, no exposure by default, no write endpoints from docs, and a valid generated contract when intentionally enabled.
-5. Compare generated schema with this canonical contract and fail CI on relevant drift, using a maintained policy for server URLs/examples and non-semantic schema ordering.
-6. Re-run the four existing CI checks plus dependency/SCA analysis; document the artifact/version and security rationale.
+**Limitations:** the Python check is a **static source-level guard**; the separate Java runtime integration tests verify generated paths, security scheme and visibility under two profiles, but do not assert every JSON response schema/property semantically matches a live business request. The OpenAPI model captures named Java records but does not prove the API rejects unknown JSON fields. The spec does not invent an exact Spring error-response JSON schema because that body was not standardized in the implemented controllers.
 
 ## Learning and interviews
 

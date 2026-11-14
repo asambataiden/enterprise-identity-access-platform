@@ -6,7 +6,7 @@ This directory is the **single navigation entry point** for learning and present
 
 ## API contract governance
 
-The [OpenAPI 3.1 contract](api/README.md) defines the four real public business HTTP operations, JWT/scope requirements, request and response models, expected status codes and the limits of current documentation exposure. The [machine-readable JSON contract](api/openapi.json) is checked by the Python security-test suite; runtime Swagger UI is **not enabled** by this documentation-only increment.
+The [OpenAPI 3.1 contract](api/README.md) defines the four real public business HTTP operations, JWT/scope requirements, request and response models, expected status codes and the limits of current documentation exposure. The [machine-readable JSON contract](api/openapi.json) is checked by the Python security-test suite; generated OpenAPI and Swagger UI are now **disabled by default**, with an explicit loopback-only `openapi-local` development profile and HTTP regression tests.
 
 ## Choose your path
 

@@ -318,7 +318,7 @@ The [versioned OpenAPI contract](../api/openapi.json) describes the three contro
 
 **Security exercise:** explain why a `bearerAuth` description does not itself enforce JWT signature, route scope, local tenant permission or SoD. The actual filter and actor resolvers do. Internal outbox, lease and mock target services do **not** become REST endpoints by being represented in architecture diagrams.
 
-**Evidence exercise:** run `python3 -m unittest ops.security.test_iam_openapi_contract -v` and note the checked SHA. This statically compares known source routes, scope metadata and schema fields; it is **not** a runtime OpenAPI/swagger test. Runtime generation and opt-in Swagger UI are follow-up engineering work, not features already installed.
+**Evidence exercise:** run `python3 -m unittest ops.security.test_iam_openapi_contract -v` and note the checked SHA. This statically compares known source routes, scope metadata and schema fields; it is **not** a runtime OpenAPI/swagger test. Generated OpenAPI and Swagger UI are now installed **only for the opt-in `openapi-local` profile**, with separate Java HTTP integration tests; the default profile still denies documentation endpoints. See the [API runtime guide](../api/README.md) for safe commands and security caveats.
 
 ## Learning completion checklist
 

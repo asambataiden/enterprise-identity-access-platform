@@ -25,3 +25,10 @@ management:
       show-details: never
 server:
   address: 127.0.0.1
+
+# API documentation is deliberately unavailable unless the openapi-local profile is active.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
