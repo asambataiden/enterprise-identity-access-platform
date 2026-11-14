@@ -1,6 +1,6 @@
 # Enterprise Identity & Access Management Platform
 
-**Status: Milestone 04 completed for educational/local-test scope (through PR #36, `3350df1`); Milestone 05 DevSecOps and operations next. No production broker, scheduler, deployment or real entitlement provisioning.**
+**Status (2026-11-14):** Core IAM governance and simulation have local/CI evidence; security controls through merged PR #50 (`f71f9a9`) are in `main`. Portfolio release is **not yet accepted**. Follow the [release candidate acceptance checklist](docs/release/portfolio-release-gates.md). No real entitlement provisioning, production deployment or production broker; real Keycloak token interoperability remains unverified.
 
 A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governance: access requests, approval controls, tenant isolation, account lifecycle orchestration, evidence and safe provisioning integrations. **No real identities or applications are provisioned in this baseline.**
 
@@ -32,6 +32,10 @@ curl -fsS http://127.0.0.1:8080/actuator/health
 ```
 
 Only `/actuator/health` is intentionally available anonymously. Business endpoints require verified identity and resource authorization; the in-process publisher is **test-only** and exposes no listener. An application run requires a local PostgreSQL URL and credentials; integration tests use disposable PostgreSQL.
+
+## Release gates
+
+See the [scope-frozen portfolio release checklist](docs/release/portfolio-release-gates.md) and [offline signed-JWT HTTP tests](docs/milestones/06b2-offline-signed-jwt-http-regression.md). Real Keycloak PKCE testing in [draft PR #49](https://github.com/asambataiden/enterprise-identity-access-platform/pull/49) is blocked and should not be represented as passing.
 
 ## Documentation map
 
