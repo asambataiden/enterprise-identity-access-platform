@@ -1,5 +1,11 @@
 package dev.asambataiden.iam.accessrequest;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -26,9 +32,29 @@ public class ApprovalDecisionController {
         this.service = service;
     }
 
-    public record DecisionRequest(ApprovalDecisionService.Decision decision) {}
-    public record DecisionResponse(UUID requestId, String decision) {}
+    @Schema(name = "DecisionRequest")
+    public record DecisionRequest(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED,
+                    allowableValues = {"APPROVED", "REJECTED"})
+            ApprovalDecisionService.Decision decision) {}
+    @Schema(name = "DecisionResponse")
+    public record DecisionResponse(UUID requestId,
+            @Schema(allowableValues = {"APPROVED", "REJECTED"}) String decision) {}
 
+    @Operation(summary = "Approve or reject one pending tenant-local request",
+            description = "Requires access:decide scope and ACTIVE local ACCESS_REQUEST_DECIDE permission. "
+                    + "Self-approval is forbidden; successful APPROVED records only governance intent "
+                    + "and durable simulated work, never an external entitlement.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Terminal decision recorded with audit",
+                    content = @Content(schema = @Schema(implementation = DecisionResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Decision missing or invalid", content = @Content),
+            @ApiResponse(responseCode = "401", description = "Missing/invalid bearer", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Wrong scope, permission or self-approval", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Request unavailable to actor", content = @Content),
+            @ApiResponse(responseCode = "409", description = "Request already decided", content = @Content)
+    })
     @PostMapping(path = "/{requestId}/decision", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<DecisionResponse> decide(
             @AuthenticationPrincipal Jwt jwt,
