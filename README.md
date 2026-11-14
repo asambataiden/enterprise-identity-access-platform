@@ -1,6 +1,6 @@
 # Enterprise Identity & Access Management Platform
 
-**Status (2026-11-14):** Core IAM governance and simulation have local/CI evidence; security controls through merged PR #50 (`f71f9a9`) are in `main`. RC-B demo merged in PR #52 (`4a2cb72`); final portfolio release remains **unverified and untagged**. Follow the [release candidate acceptance checklist](docs/release/portfolio-release-gates.md). No real entitlement provisioning, production deployment or production broker; real Keycloak token interoperability remains unverified.
+**Status (2026-11-14):** Educational portfolio release `v0.1.0-portfolio` is published at commit `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391`. Local regression and Java/Security CI passed at that SHA. See the [complete engineering guide](docs/portfolio/complete-engineering-guide.md) for use cases, step-by-step implementation, technology choices, architecture diagrams and interview preparation. This is not production-ready: no real entitlement provisioning, production deployment or production broker; live Keycloak token interoperability remains unverified.
 
 A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governance: access requests, approval controls, tenant isolation, account lifecycle orchestration, evidence and safe provisioning integrations. **No real identities or applications are provisioned in this baseline.**
 
@@ -40,6 +40,8 @@ Only `/actuator/health` is intentionally available anonymously. Business endpoin
 See the [scope-frozen portfolio release checklist](docs/release/portfolio-release-gates.md), [demo runbook](docs/release/portfolio-demo-runbook.md), [local operations guide](docs/release/local-operations-runbook.md), [evidence ledger](docs/release/evidence-register.md) and [draft release notes](docs/release/portfolio-release-notes-draft.md) and [offline signed-JWT HTTP tests](docs/milestones/06b2-offline-signed-jwt-http-regression.md). Real Keycloak PKCE testing in [draft PR #49](https://github.com/asambataiden/enterprise-identity-access-platform/pull/49) is blocked and should not be represented as passing.
 
 ## Documentation map
+
+- [Complete engineering guide: use cases, implementation journey, tech stack, diagrams and interview preparation](docs/portfolio/complete-engineering-guide.md)
 
 - [UC-001: Request employee access](docs/use-cases/UC-001-application-access-request.md)
 - [Milestone 01A: tenant-scoped persistence and idempotency](docs/milestones/01a-persistence-invariants.md)
