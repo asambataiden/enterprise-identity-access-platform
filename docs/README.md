@@ -4,6 +4,10 @@ This directory is the **single navigation entry point** for learning and present
 
 **Published implementation release:** `v0.1.0-portfolio` → `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391` (immutable tag). Later documentation changes live on `main`; they are not part of that historical tag.
 
+## Real Keycloak acceptance evidence (post-tag)
+
+The [06C real-token HTTP authentication results](milestones/06c-live-keycloak-bearer-acceptance.md) and [06D active reviewer grant/revoke results](milestones/06d-live-keycloak-reviewer-authorization.md) document operator-observed local JWT authentication and authorization. They postdate the immutable historical `v0.1.0-portfolio` tag and do not imply production readiness.
+
 ## GitHub repository governance
 
 The [main branch protection policy and operational setup](governance/README.md) documents the four required CI jobs, solo-maintainer PR workflow, administrator enforcement, required conversation resolution and verification steps. The [proposed REST configuration](governance/main-branch-protection.json) is a **configuration template**, not proof that GitHub branch protection is active; it requires a separate GitHub admin action after review.
