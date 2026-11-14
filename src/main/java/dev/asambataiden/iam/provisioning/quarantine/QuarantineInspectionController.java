@@ -75,6 +75,7 @@ public class QuarantineInspectionController {
             @ApiResponse(responseCode = "200", description = "Quarantine snapshot",
                     content = @Content(schema = @Schema(
                             implementation = ProvisioningRecoveryInspector.Snapshot.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid requestId UUID path parameter", content = @Content),
             @ApiResponse(responseCode = "401", description = "Missing/invalid bearer", content = @Content),
             @ApiResponse(responseCode = "403", description = "Missing scope or local permission", content = @Content),
             @ApiResponse(responseCode = "404", description = "Quarantined item unavailable", content = @Content)
