@@ -28,7 +28,7 @@ This is the **portfolio release candidate**, not a production go-live. Every row
 - [ ] **RC-01 Full regression:** fresh `mvn -B --no-transfer-progress clean verify` on release-head commit with all tests successful, including Testcontainers; retain CI link and commit SHA.
 - [ ] **RC-02 Security gates:** Java CI, Gitleaks, Trivy and SpotBugs/Find Security Bugs all green at **same release-head commit**; vulnerabilities not silently suppressed.
 - [ ] **RC-03 Scope truthfulness:** README, roadmap, capability matrix, threat model and diagrams consistently distinguish local/test-only mechanisms from unimplemented production capabilities.
-- [ ] **RC-04 Repeatable local demo:** one deterministic, synthetic-data walkthrough for request → decision → simulated provisioning/outbox/inbox → quarantine evidence; **no live Keycloak login required** for the deterministic demo, and no manual DB mutations presented as API behavior.
+- [ ] **RC-04 Repeatable local demo:** run [the staged Testcontainers portfolio demo](portfolio-demo-runbook.md) via `bash ops/demo/run-portfolio-demo.sh` and record zero test failures. The stages use **independent fixtures**, not one shared request/session; test seed SQL is setup, not an HTTP API call. Live Keycloak is not required, and no real entitlement is granted.
 - [ ] **RC-05 Operating notes:** document prerequisites, startup/shutdown, expected health check, isolated test database, log redaction, rollback limitations and known failure scenarios.
 - [ ] **RC-06 Evidence index:** record the demo and regression command/results, immutable commit, CI URLs, architecture/sequence diagrams and outstanding limitations without committing token/secret values.
 - [ ] **RC-07 Reviewer sign-off:** source code and evidence reviewed for ownership, least privilege, bad-path behavior, test coverage and portfolio accuracy.
@@ -42,7 +42,7 @@ This is the **portfolio release candidate**, not a production go-live. Every row
 ## Bounded next increments
 
 1. **RC-A: Documentation truthfulness and demo specification.** This PR adds the register and aligns stale entry-point docs, without changing Java or infrastructure.
-2. **RC-B: Deterministic demonstration.** Reuse existing tests/fixtures rather than inventing new IAM components; produce a single reproducible demo entrypoint only if existing commands cannot satisfy RC-04.
+2. **RC-B: Deterministic demonstration.** [One command](portfolio-demo-runbook.md) selects existing HTTP, signed-JWT, simulated provisioning, outbox/inbox and quarantine tests. Acceptance requires observed local run results; selected tests are separate scenarios rather than a single seamless API session.
 3. **RC-C: Final verification and release note.** Run full CI, record immutable evidence and explicit limits, then tag only when checklist gates are met.
 
 Stop adding features outside these three increments unless an observed failing acceptance check forces a minimal correction.
