@@ -24,6 +24,10 @@ Use this four-part scoring rubric for each question:
 
 Do not use real employee data, login credentials, long-lived access tokens or actual entitlement targets. Do not run a destructive database/Compose reset. The curated demo runs isolated test containers and requires no Keycloak login.
 
+## Two source-verified concurrency case studies
+
+Use the [Concurrency and Governance Learning Lab](../learning/19-concurrency-idempotency-approval-case-studies.md) to practice the two scenarios from the live interview sequence: six equivalent concurrent requests and two competing terminal approvals. The [UC-001 addendum](../use-cases/UC-001-concurrency-and-approval-addendum.md) maps each business invariant to SQL and named integration tests. These documents are learning materials, not new runtime behavior or independently observed test executions.
+
 ## Module 1 — Product boundary, architecture and domain vocabulary
 
 ### Q01 — What business problem does the capstone solve?
