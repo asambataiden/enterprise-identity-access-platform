@@ -150,11 +150,19 @@ def main():
                         help="Optional OAuth scope to request for the synthetic login")
     parser.add_argument("--quarantine-list", action="store_true",
                         help="Read-only authenticated quarantine GET; no decisions or provisioning")
+    parser.add_argument("--verify-bearer-boundary", action="store_true",
+                        help="After real PKCE login, perform only read-only HTTP authentication probes")
     parser.add_argument("--decision-request-id", help="Synthetic PENDING access request UUID for approval")
     parser.add_argument("--decision", choices=["APPROVED", "REJECTED"], default="APPROVED")
     parser.add_argument("--repeat-on-success", action="store_true",
                         help="Repeat authorized POST once and assert same persisted request ID")
     args = parser.parse_args()
+    if args.verify_bearer_boundary and (
+            args.employee_id or args.application_id or args.idempotency_key
+            or args.decision_request_id or args.quarantine_list or args.repeat_on_success
+            or args.expect_status is not None or args.assert_self_requester
+            or args.assert_quarantine_reviewer or args.diagnose_local_binding):
+        parser.error("--verify-bearer-boundary is read-only and cannot combine with mutation or fixture options")
     if args.assert_quarantine_reviewer and (not args.quarantine_list or
             args.scope != "provisioning:review" or args.expect_status not in (200, 403)):
         parser.error("--assert-quarantine-reviewer requires --quarantine-list, "
@@ -279,6 +287,14 @@ def main():
     print("  requested scope present:", args.scope in scopes)
     print("  tenant_id present:", bool(claims.get("tenant_id")))
     print("Access token intentionally not displayed or saved.")
+
+    if args.verify_bearer_boundary:
+        boundary_path = Path(__file__).resolve().with_name("bearer-boundary.py")
+        spec = importlib.util.spec_from_file_location("iam_bearer_boundary", boundary_path)
+        boundary = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(boundary)
+        boundary.verify_real_bearer_boundary(args.api_url, access_token)
+        return
 
     if args.assert_self_requester:
         assert_self_requester_binding(claims, args.expected_tenant_id, args.decision_request_id)
