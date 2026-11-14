@@ -286,7 +286,6 @@
     "schemas": {
       "CreateAccessRequest": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
           "employeeId",
           "applicationId",
@@ -367,7 +366,6 @@
       },
       "DecisionRequest": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
           "decision"
         ],
