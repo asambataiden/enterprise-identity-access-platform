@@ -1,0 +1,477 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Enterprise IAM Governance API",
+    "version": "0.1.0-portfolio-contract",
+    "description": "Educational, tenant-scoped access governance HTTP contract. APPROVED is governance authorization, not evidence of an effective external entitlement. The published v0.1.0-portfolio tag is an immutable historical release; this contract describes the current API implementation on main. Internal provisioning, mock adapters, outbox/inbox services and review-journal writes are NOT public endpoints."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8082",
+      "description": "Optional loopback development server; not a public deployment"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Access requests",
+      "description": "Authorized tenant-local access intent."
+    },
+    {
+      "name": "Approval decisions",
+      "description": "Distinct authorized approver; decision only."
+    },
+    {
+      "name": "Quarantine inspection",
+      "description": "Tenant-scoped read-only diagnostics; no remediation."
+    }
+  ],
+  "paths": {
+    "/api/v1/access-requests": {
+      "post": {
+        "tags": [
+          "Access requests"
+        ],
+        "operationId": "createAccessRequest",
+        "summary": "Create or idempotently replay a tenant-local access request",
+        "description": "Requires SCOPE_access:request plus active tenant-local ACCESS_REQUEST_CREATE. Tenant and requester are inferred from authenticated JWT and server-side actor mapping; they must never appear as client-writable request fields. Equivalent replay returns the existing request with HTTP 201; changed intent with the same tenant/key returns 409.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-authority": "SCOPE_access:request",
+        "x-local-permission": "ACCESS_REQUEST_CREATE",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Tenant-scoped stable business retry identity; nonblank, trimmed, maximum 128 characters.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created request or equivalent idempotent replay. Both return the stored request identity.",
+            "headers": {
+              "Location": {
+                "description": "Relative URI of stored request. The current API does not expose GET by request ID.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or parameter."
+          },
+          "401": {
+            "description": "Missing or invalid bearer authentication."
+          },
+          "403": {
+            "description": "Route scope, local actor or business permission denied."
+          },
+          "404": {
+            "description": "Requested tenant-local employee, app or role unavailable; hides foreign resource existence."
+          },
+          "409": {
+            "description": "Idempotency key reused with different business terms."
+          }
+        }
+      }
+    },
+    "/api/v1/access-requests/{requestId}/decision": {
+      "post": {
+        "tags": [
+          "Approval decisions"
+        ],
+        "operationId": "decideAccessRequest",
+        "summary": "Approve or reject one pending request",
+        "description": "Requires SCOPE_access:decide plus active tenant-local ACCESS_REQUEST_DECIDE. The approver comes from trusted actor mapping; self-approval is denied. A successful APPROVED decision creates local provisioning intent only, never an external grant.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-authority": "SCOPE_access:decide",
+        "x-local-permission": "ACCESS_REQUEST_DECIDE",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "One terminal decision recorded atomically with audit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or parameter."
+          },
+          "401": {
+            "description": "Missing or invalid bearer authentication."
+          },
+          "403": {
+            "description": "Route scope, local actor or business permission denied."
+          },
+          "404": {
+            "description": "Request missing or not tenant-visible."
+          },
+          "409": {
+            "description": "Request already decided."
+          }
+        }
+      }
+    },
+    "/api/v1/provisioning/quarantine": {
+      "get": {
+        "tags": [
+          "Quarantine inspection"
+        ],
+        "operationId": "listQuarantinedWork",
+        "summary": "List bounded tenant-local quarantined work snapshots",
+        "description": "Read-only HTTP endpoint. Requires SCOPE_provisioning:review plus ACTIVE local PROVISIONING_QUARANTINE_REVIEW permission. No target access, repair, retry, or state mutation.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-authority": "SCOPE_provisioning:review",
+        "x-local-permission": "PROVISIONING_QUARANTINE_REVIEW",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum snapshots returned (default 20, valid 1–100).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant-local read-only snapshots.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuarantineSnapshot"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or parameter."
+          },
+          "401": {
+            "description": "Missing or invalid bearer authentication."
+          },
+          "403": {
+            "description": "Route scope, local actor or business permission denied."
+          }
+        }
+      }
+    },
+    "/api/v1/provisioning/quarantine/{requestId}": {
+      "get": {
+        "tags": [
+          "Quarantine inspection"
+        ],
+        "operationId": "getQuarantinedWork",
+        "summary": "Inspect one quarantined work item without mutation",
+        "description": "The requested item must belong to the authenticated reviewer's tenant and be QUARANTINED. Foreign, missing and non-quarantined items are concealed.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-authority": "SCOPE_provisioning:review",
+        "x-local-permission": "PROVISIONING_QUARANTINE_REVIEW",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read-only snapshot of a quarantined item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuarantineSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or parameter."
+          },
+          "401": {
+            "description": "Missing or invalid bearer authentication."
+          },
+          "403": {
+            "description": "Route scope, local actor or business permission denied."
+          },
+          "404": {
+            "description": "Quarantined item unavailable or not visible to caller."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Issuer, signature, audience and expiry verified by resource server. Scope and local tenant actor permission are separate checks."
+      }
+    },
+    "schemas": {
+      "CreateAccessRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "employeeId",
+          "applicationId",
+          "roleKey"
+        ],
+        "properties": {
+          "employeeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "roleKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Must not be blank or have leading/trailing whitespace."
+          }
+        },
+        "description": "Client-writable business payload only; tenantId and requesterId are server-derived."
+      },
+      "AccessRequest": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenantId",
+          "requesterId",
+          "employeeId",
+          "applicationId",
+          "roleKey",
+          "idempotencyKey",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requesterId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "employeeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "applicationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "roleKey": {
+            "type": "string"
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "Stored record; JSON includes tenant/requester and key for response transparency, but no client may set them in creation payload."
+      },
+      "DecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ]
+          }
+        }
+      },
+      "DecisionResponse": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "decision"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ]
+          }
+        }
+      },
+      "QuarantineSnapshot": {
+        "type": "object",
+        "required": [
+          "tenantId",
+          "requestId",
+          "state",
+          "attempts",
+          "startedAttempts",
+          "mockVerified",
+          "mockAbsent",
+          "mockUnknown"
+        ],
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "QUARANTINED"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastErrorCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Allowlisted diagnostic code, not raw exception text."
+          },
+          "nextAttemptAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "leaseExpiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "startedAttempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mockVerified": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mockAbsent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "mockUnknown": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "description": "Read-only local work and mock observation counters. mockVerified is not proof of real access."
+      }
+    }
+  }
+}
