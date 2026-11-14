@@ -1,6 +1,6 @@
-# Portfolio release candidate notes — enterprise IAM governance platform
+# Historical portfolio release candidate notes — enterprise IAM governance platform
 
-**Status:** DRAFT release candidate, not tagged and not approved for production. **Document basis:** `main` `4a2cb72`, 2026-11-14. Final release SHA and validation evidence must be attached before publishing a tag or a release announcement.
+**Historical status at writing:** DRAFT release candidate based on `main` `4a2cb72`, 2026-11-14. **Current publication status:** the educational portfolio was subsequently verified and tagged as `v0.1.0-portfolio` at `cf0e2fce324fa6c81bf5bccc4ee49dadf1925391`. See the [final evidence addendum](evidence-register.md) and merged PR #53. This document preserves the original draft wording for provenance and should not be presented as an outstanding pre-publication gate. **Production approval remains absent.**
 
 ## Project summary
 
@@ -25,9 +25,9 @@ This Java 25 / Spring Boot 4.1.2 / PostgreSQL 17 modular monolith demonstrates *
 - No proven production-grade secrets, TLS/HA, complete monitoring/SLO implementation, disaster recovery drill or security certification.
 - The curated demo uses multiple isolated fixtures, not a single externally deployed user-journey test.
 
-## Verification to attach before release
+## Historical verification plan (final results now recorded)
 
-See [evidence register](evidence-register.md) for observed PR #50–#52 tests/CI and exact unresolved release-head checklist. Do not replace an unperformed final run with older PR evidence.
+See [evidence register](evidence-register.md) for **both** the originally prepared PR #50–#52 evidence and the later **observed final release-head regression/CI/tag**. Never relabel older PR evidence as if it tested another SHA.
 
 ## Usage and learning resources
 
@@ -43,4 +43,4 @@ See [evidence register](evidence-register.md) for observed PR #50–#52 tests/CI
 
 The strongest design decision is **separating identity authentication from local resource authorization** and **separating approval intent from effective external access**. Database constraints, scoped actor resolution, transactional event persistence and deduplicated local processing provide meaningful evidence of safety. The project is successful as a verifiable educational portfolio even when a local identity provider login fails—provided that missing interoperability is disclosed, never misrepresented as tested.
 
-**Publication condition:** once RC-01 through RC-07 have evidence at the chosen immutable commit, promote this text from draft to a versioned portfolio release note. Do not use the term production-ready without a separate production acceptance program.
+**Historical publication condition:** RC-A through RC-C were completed for the scoped educational release and `v0.1.0-portfolio` was published. The notes remain a historical draft. Do not use the term production-ready without a separate production acceptance program.
