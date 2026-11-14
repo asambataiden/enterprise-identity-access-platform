@@ -1,6 +1,8 @@
 # UC-001 — Tenant administrator requests application access for an employee
 
-**Status:** specified, not implemented. **Priority:** first business vertical slice.
+**Historical specification (Milestone 00):** this page records the *initial proposed* UC-001 contract and contains future candidate states/objects. At the published `v0.1.0-portfolio` release, the scoped request intake, authorization policy, tenant-safe persistence, approvals and mock reliability workflows have code/tests. Consult the [as-built use-case catalogue](README.md), [UC-001 concurrency addendum](UC-001-concurrency-and-approval-addendum.md) and [capability matrix](../architecture/capability-matrix.md) before interpreting any original “not implemented” statements. Real target entitlements and production IAM remain absent.
+
+**Original priority:** first business vertical slice.
 
 ## Business outcome
 
