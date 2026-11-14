@@ -1,5 +1,6 @@
 package dev.asambataiden.iam.provisioning.quarantine;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -21,10 +22,12 @@ public class ProvisioningRecoveryInspector {
         this.jdbc = jdbc;
     }
 
+    @Schema(name = "QuarantineSnapshot",
+            description = "Read-only local work diagnostics; mockVerified does not prove real access.")
     public record Snapshot(
             UUID tenantId,
             UUID requestId,
-            String state,
+            @Schema(allowableValues = {"QUARANTINED"}) String state,
             int attempts,
             String lastErrorCode,
             OffsetDateTime nextAttemptAt,
