@@ -1,6 +1,26 @@
 # Milestone 06C — Real Keycloak access token through the HTTP resource-server boundary
 
-**Status: implementation submitted for review; live browser acceptance still pending.**
+**Status: local read-only real-token acceptance observed on 2026-11-14; PR merge remains pending.**
+
+## Observed acceptance record — 2026-11-14
+
+**Evidence provenance:** operator-supplied terminal output from local checkout `test/iam-live-keycloak-bearer-boundary`; feature-head at PR creation `0560e5ebcc51390cd03756baafc38238dd6f6127`. This is a local observation, not an assertion of independent reproduction or a hosted end-to-end browser CI run. The transcript did not include a separate `git rev-parse HEAD` output at the moment of the browser exercise; reconfirm the exact commit before final release evidence registration.
+
+| Exercise | Observed result | Interpretation |
+| --- | --- | --- |
+| `curl http://127.0.0.1:8082/actuator/health` | `status: UP` | IAM API reachable; health endpoint |
+| Anonymous `GET /api/v1/provisioning/quarantine` | HTTP `401` | Protected route rejects unauthenticated access |
+| Synthetic Keycloak browser Authorization Code + S256 PKCE | `PASS: Keycloak authorization code exchanged using PKCE` | Live OAuth browser token exchange completed |
+| Diagnostic claims | issuer matched; expected API audience, requested `access:request` scope, and `tenant_id` present | Python diagnostics are **not** signature validation |
+| Anonymous GET in real-token probe | HTTP `401` | Authentication required |
+| Tampered-signature JWT in real-token probe | HTTP `401` | Signature modification rejected by API |
+| Genuine Keycloak access token in real-token probe | HTTP `403` | JWT accepted by Spring Security authentication; quarantine route authorization denied with `access:request` scope |
+| Python helper tests | `Ran 40 tests ... OK` | Unit-test logic, some HTTP responses mocked; **not** evidence of live token acceptance alone |
+| PR #68 CI prior to recording this evidence | 4 green checks reported by operator | The subsequent documentation commit requires its own refreshed checks before merge |
+
+**No bearer token, synthetic password, callback authorization code or HTTP response body was captured in the evidence record.** A real-token `200` with `provisioning:review` scope, active employee and matching local review permission remains **unverified**, as do negative live-token issuer/audience changes and target-side access grants.
+
+
 This increment replaces the outdated approach in [historical draft PR #49](https://github.com/asambataiden/enterprise-identity-access-platform/pull/49) with a fresh, minimal read-only probe built on protected `main`.
 
 ## Why
