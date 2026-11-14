@@ -17,8 +17,8 @@ import org.springframework.security.web.SecurityFilterChain;
 /**
  * Anonymous read-only API documentation for explicit loopback development only.
  *
- * Both the openapi-local profile and application-openapi-local.yml opt-in are
- * required. Without this profile, the main filter's default-deny policy remains
+ * The openapi-local profile activates application-openapi-local.yml and this
+ * documentation-only filter chain. Without this profile, the main filter's default-deny policy remains
  * unchanged and Springdoc endpoints are disabled.
  *
  * Never activate the profile on a publicly bound or shared deployment.
