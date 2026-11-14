@@ -1,6 +1,6 @@
 # Capability matrix — implemented versus planned
 
-**Snapshot:** `main` at `3350df1`, 2026-11-13. “Implemented” means code and tests exist in this repository, not production certification. Test-only and lab-only capabilities are labeled explicitly.
+**As-built Milestone 04 snapshot:** `3350df1`, 2026-11-13. **Release audit update:** `f71f9a9`, 2026-11-14. “Implemented” means code and scoped tests exist, not production certification. See [release acceptance](../release/portfolio-release-gates.md).
 
 | Area | Current status | Evidence / limit |
 | --- | --- | --- |
@@ -14,10 +14,12 @@
 | Transactional inbox V14 and RECEIVED projection | Implemented | Deduplication of local projection; no external exactly-once guarantee |
 | End-to-end approval → outbox → relay → inbox | Verified as local integration test | In-process publisher only; no broker durability test |
 | PostgreSQL disposable integration environment and Java CI | Implemented/tested | CI does not establish deployment or security certification |
+| Signed JWT through servlet HTTP filter | Implemented for ephemeral RSA test keys (PR #50) | Test-only decoder verifies signature, issuer, audience and expiry; live Keycloak interoperability **unverified** |
+| Secret, dependency, static-security scanning and workflow provenance | Implemented in hosted CI | Gitleaks, Trivy, SpotBugs/Find Security Bugs, pinned actions and curated evidence; not runtime certification |
 | Production credentials, secret rotation and least-privilege IdP admin automation | Not established | Local lab bootstrap is not a production model |
 | Production broker listener, retry operations, poison-event workflow | Not implemented | Require provenance/auth, tenant scope and operator controls |
 | Real SCIM/app target provisioning and reconciliation | Not implemented | Never claim effective entitlement from `RECEIVED` |
 | Kubernetes/multicloud deploy, observability SLOs, backup/restore, load tests | Not demonstrated | Milestone 05 candidates; define measurable acceptance gates first |
-| Attested portfolio release and interview workbook | Not completed | Milestone 06 |
+| Portfolio release evidence and interview workbook | Not completed | Scope-frozen [release gates](../release/portfolio-release-gates.md) RC-01 through RC-07 pending |
 
 See [system overview](system-overview.md) for package layout and trust boundaries, and [Milestone 04 closeout](../milestones/04-closeout-evidence.md) for observed test counts and repository provenance.
