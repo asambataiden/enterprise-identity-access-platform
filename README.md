@@ -41,6 +41,9 @@ See the [scope-frozen portfolio release checklist](docs/release/portfolio-releas
 
 ## Documentation map
 
+- [Concurrency & Governance Learning Lab: six concurrent retries and opposing approvals](docs/learning/19-concurrency-idempotency-approval-case-studies.md)
+- [UC-001 concurrency and approval acceptance addendum](docs/use-cases/UC-001-concurrency-and-approval-addendum.md)
+
 - [Complete engineering guide: use cases, implementation journey, tech stack and architecture diagrams](docs/portfolio/complete-engineering-guide.md)
 - [Technical Interview Workbook: source-level questions, model answers and practical exercises](docs/portfolio/technical-interview-workbook.md)
 
