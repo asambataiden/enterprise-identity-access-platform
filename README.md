@@ -1,6 +1,6 @@
 # Enterprise Identity & Access Management Platform
 
-**Status (2026-11-14):** Core IAM governance and simulation have local/CI evidence; security controls through merged PR #50 (`f71f9a9`) are in `main`. Portfolio release is **not yet accepted**. Follow the [release candidate acceptance checklist](docs/release/portfolio-release-gates.md). No real entitlement provisioning, production deployment or production broker; real Keycloak token interoperability remains unverified.
+**Status (2026-11-14):** Core IAM governance and simulation have local/CI evidence; security controls through merged PR #50 (`f71f9a9`) are in `main`. RC-B demo merged in PR #52 (`4a2cb72`); final portfolio release remains **unverified and untagged**. Follow the [release candidate acceptance checklist](docs/release/portfolio-release-gates.md). No real entitlement provisioning, production deployment or production broker; real Keycloak token interoperability remains unverified.
 
 A Java 25 / Spring Boot 4.1.2 educational platform for enterprise access governance: access requests, approval controls, tenant isolation, account lifecycle orchestration, evidence and safe provisioning integrations. **No real identities or applications are provisioned in this baseline.**
 
@@ -26,8 +26,10 @@ Java 25, Maven 3.9+, Git. Docker is required for PostgreSQL Testcontainers integ
 java -version
 mvn -version
 mvn -B --no-transfer-progress clean verify
+bash ops/demo/run-portfolio-demo.sh # selected tests, no live Keycloak needed
+# Optional running API (requires your separately configured local PostgreSQL):
 mvn spring-boot:run
-# separate terminal:
+# Separate terminal, default port 8080 only when not overridden:
 curl -fsS http://127.0.0.1:8080/actuator/health
 ```
 
@@ -35,7 +37,7 @@ Only `/actuator/health` is intentionally available anonymously. Business endpoin
 
 ## Release gates
 
-See the [scope-frozen portfolio release checklist](docs/release/portfolio-release-gates.md) and [offline signed-JWT HTTP tests](docs/milestones/06b2-offline-signed-jwt-http-regression.md). Real Keycloak PKCE testing in [draft PR #49](https://github.com/asambataiden/enterprise-identity-access-platform/pull/49) is blocked and should not be represented as passing.
+See the [scope-frozen portfolio release checklist](docs/release/portfolio-release-gates.md), [demo runbook](docs/release/portfolio-demo-runbook.md), [local operations guide](docs/release/local-operations-runbook.md), [evidence ledger](docs/release/evidence-register.md) and [draft release notes](docs/release/portfolio-release-notes-draft.md) and [offline signed-JWT HTTP tests](docs/milestones/06b2-offline-signed-jwt-http-regression.md). Real Keycloak PKCE testing in [draft PR #49](https://github.com/asambataiden/enterprise-identity-access-platform/pull/49) is blocked and should not be represented as passing.
 
 ## Documentation map
 
